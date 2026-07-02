@@ -1,0 +1,120 @@
+diff --git a/node_modules/israeli-bank-scrapers/lib/scrapers/max.js b/node_modules/israeli-bank-scrapers/lib/scrapers/max.js
+index ab8e48d..36543ca 100644
+--- a/node_modules/israeli-bank-scrapers/lib/scrapers/max.js
++++ b/node_modules/israeli-bank-scrapers/lib/scrapers/max.js
+@@ -117,7 +117,10 @@ function getTransactionType(planName, planTypeId) {
+         case 5:
+           return _transactions2.TransactionTypes.Normal;
+         default:
+-          throw new Error(`Unknown transaction type ${cleanedUpTxnTypeStr}`);
++          // Patched (bank-agent): Max occasionally returns plan names not in
++          // MaxPlanName (e.g. "העברה לסל מצטבר"). Don't crash the whole scrape
++          // over one unrecognized label — treat it as a Normal transaction.
++          return _transactions2.TransactionTypes.Normal;
+       }
+   }
+ }
+diff --git a/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js b/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js
+index ce60e06..10b0f2f 100644
+--- a/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js
++++ b/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js
+@@ -170,6 +170,77 @@ async function selectPortfolio(page, targetID) {
+   if (!clicked) throw new Error(`Portfolio option not found for ID: ${targetID}`);
+   await (0, _elementsInteractions.waitUntilElementDisappear)(page, '.loading-bar-spinner');
+ }
++// ── Balance + HTML snapshot extraction ───────────────────────────────────────
++// Called while the page is still on /main/home (BEFORE clickButton navigates
++// away to the statements view). Saves the raw portal HTML to scraped-data/ so
++// analyze-balance-html.js can find the exact selector without re-running.
++async function extractBalanceAndSnapshot(page, portfolioID) {
++  const result = await page.evaluate(() => {
++    function parseILS(str) {
++      if (!str) return null;
++      const n = parseFloat(str.replace(/[^\d.-]/g, '').replace(/,/g, ''));
++      return isNaN(n) || n === 0 ? null : n;
++    }
++
++    // Priority selector list (most likely for Yahav BaNCS Digital)
++    const selectors = [
++      'span.portfolio-balance',
++      '.portfolio-balance',
++      '.account-balance .amount',
++      '.account-balance',
++      '[class*="balance"] .amount',
++      '[class*="balance"]',
++      '[class*="amount"]',
++      '.total-balance',
++      '.current-balance',
++    ];
++    for (const sel of selectors) {
++      const el = document.querySelector(sel);
++      if (el) {
++        const n = parseILS(el.textContent);
++        if (n !== null) return { balance: n, via: sel, html: document.documentElement.outerHTML };
++      }
++    }
++
++    // Text walk: find any element containing "יתרה" and look for a nearby number
++    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
++    while (walk.nextNode()) {
++      const t = walk.currentNode.textContent.trim();
++      if (!t.includes('יתרה')) continue;
++      let node = walk.currentNode.parentElement;
++      for (let d = 0; d < 5 && node; d++, node = node.parentElement) {
++        for (const sib of [node.nextElementSibling, node.previousElementSibling]) {
++          if (!sib) continue;
++          const n = parseILS(sib.textContent);
++          if (n !== null && n > 0 && n < 50000000) {
++            return { balance: n, via: `yitra-sibling(depth=${d})`, html: document.documentElement.outerHTML };
++          }
++        }
++      }
++    }
++
++    // No match — still return full HTML so we can find the right selector offline
++    return { balance: null, via: null, html: document.documentElement.outerHTML };
++  });
++
++  // Persist HTML snapshot for offline analysis (analyze-balance-html.js)
++  try {
++    const fs = require('fs');
++    const path = require('path');
++    // Walk up from lib/scrapers/ → lib/ → package root → repo root → scraped-data/
++    const dataDir = path.join(__dirname, '..', '..', '..', 'scraped-data');
++    fs.mkdirSync(dataDir, { recursive: true });
++    const safeID = String(portfolioID).replace(/[^a-z0-9]/gi, '_');
++    fs.writeFileSync(
++      path.join(dataDir, `yahav-portal-${safeID}.html`),
++      result.html,
++      'utf8'
++    );
++  } catch (_) { /* non-fatal — snapshot is a best-effort debug aid */ }
++
++  return { balance: result.balance, via: result.via };
++}
++
+ async function fetchAccounts(page, startDate, options) {
+   // Snapshot up front: the dropdown only lists unselected portfolios, so after the first
+   // switch we would lose any not yet scraped.
+@@ -184,9 +255,20 @@ async function fetchAccounts(page, startDate, options) {
+       await selectPortfolio(page, portfolioID);
+     }
+     await (0, _elementsInteractions.waitUntilElementFound)(page, ACCOUNT_DETAILS_SELECTOR, true);
++
++    // Extract balance + save HTML BEFORE navigating away from the home page
++    const { balance, via } = await extractBalanceAndSnapshot(page, portfolioID);
++
+     await (0, _elementsInteractions.clickButton)(page, ACCOUNT_DETAILS_SELECTOR);
+     await (0, _elementsInteractions.waitUntilElementFound)(page, '.statement-options .selected-item-top', true);
+-    accounts.push(await fetchAccountData(page, startDate, portfolioID, options));
++    const accountData = await fetchAccountData(page, startDate, portfolioID, options);
++
++    // Attach balance to the account object (picked up by sync.js → API → client)
++    if (typeof balance === 'number') {
++      accountData.balance = balance;
++      accountData.balanceVia = via; // debug info, not sent to API
++    }
++    accounts.push(accountData);
+   }
+   return accounts;
+ }

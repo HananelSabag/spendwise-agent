@@ -1,0 +1,30 @@
+{
+  "name": "spendwise-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "SpendWise local sync agent — scrapes Israeli banks and feeds transactions into SpendWise with end-to-end encrypted credentials",
+  "author": "Hananel Sabag",
+  "contributors": [
+    "Hananel Sabag",
+    "Yuda Sabag"
+  ],
+  "scripts": {
+    "agent": "node src/agent.js",
+    "standalone": "node src/standalone.js",
+    "keys": "node tools/generate-keys.js",
+    "test": "node --test",
+    "postinstall": "patch-package"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "israeli-bank-scrapers": "^6.7.8",
+    "puppeteer": "^24.40.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "patch-package": "^8.0.1"
+  }
+}

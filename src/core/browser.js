@@ -1,0 +1,113 @@
+/**
+ * Browser lifecycle — launch, Cloudflare warmup, and GUARANTEED cleanup.
+ *
+ * withBrowser() is the only way to get a browser: it always closes it,
+ * even on crashes or Ctrl+C (SIGINT/SIGTERM), so no orphaned Chrome
+ * processes hold the bank session hostage.
+ */
+
+import fs from 'node:fs';
+import puppeteer from 'puppeteer';
+import { PROFILE_DIR } from '../utils/paths.js';
+import { logger } from '../utils/log.js';
+
+const log = logger('browser');
+
+function detectChrome() {
+  const candidates = [
+    process.env.CHROMIUM_PATH && process.env.CHROMIUM_PATH.trim(),
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/snap/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return puppeteer.executablePath();
+}
+
+async function launch() {
+  const executablePath = detectChrome();
+  log.info(`launching Chrome: ${executablePath}`);
+  if (!process.env.DISPLAY && process.platform !== 'win32') {
+    log.warn('no DISPLAY set — headful Chrome needs Xvfb on Linux');
+  }
+  // Headful + real Chrome + persistent profile is what passes Cloudflare's
+  // bot check and keeps the cf_clearance cookie between runs.
+  return puppeteer.launch({
+    headless: false,
+    executablePath,
+    userDataDir: PROFILE_DIR,
+    defaultViewport: null,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-extensions',
+      '--window-size=1280,900',
+    ],
+  });
+}
+
+/**
+ * Run `fn(browser)` with guaranteed cleanup. Signal handlers ensure the
+ * browser dies even on Ctrl+C mid-scrape.
+ */
+export async function withBrowser(fn) {
+  const browser = await launch();
+  const kill = async () => {
+    log.warn('termination signal — closing browser');
+    await browser.close().catch(() => {});
+    process.exit(130);
+  };
+  process.once('SIGINT', kill);
+  process.once('SIGTERM', kill);
+
+  try {
+    return await fn(browser);
+  } finally {
+    process.removeListener('SIGINT', kill);
+    process.removeListener('SIGTERM', kill);
+    await browser.close().catch(() => {});
+    log.debug('browser closed');
+  }
+}
+
+// ── Cloudflare warmup ─────────────────────────────────────────────
+function looksLikeChallenge(text, title) {
+  const t = (title || '').toLowerCase();
+  const b = (text || '').toLowerCase();
+  return (
+    t.includes('just a moment') ||
+    b.includes('security verification') ||
+    b.includes('verifying you are') ||
+    b.includes('checking your browser') ||
+    b.includes('needs to review the security')
+  );
+}
+
+/** Visit a bank's public page first so a Cloudflare challenge can clear. */
+export async function warmup(browser, url, label) {
+  const page = await browser.newPage();
+  const wlog = logger(label);
+  try {
+    wlog.info(`warming up Cloudflare: ${url}`);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    const deadline = Date.now() + 45000;
+    let cleared = false;
+    while (Date.now() < deadline) {
+      const blocked = await page
+        .evaluate(() => [document.body ? document.body.innerText : '', document.title])
+        .then(([text, title]) => looksLikeChallenge(text, title))
+        .catch(() => false);
+      if (!blocked) { cleared = true; break; }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    wlog[cleared ? 'info' : 'warn'](cleared ? 'Cloudflare clear' : 'challenge did not clear within 45s');
+  } finally {
+    await page.close().catch(() => {});
+  }
+}

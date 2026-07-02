@@ -1,0 +1,21 @@
+# Secrets — NEVER commit
+.env
+agent-private.key
+
+# Runtime state
+.agent-state.json
+.agent.lock
+*.log
+*.log.*.bak
+
+# Scraped data (financial info stays local)
+scraped-data/
+
+# Browser profile (bank session cookies)
+.chrome-profile/
+
+# Failure screenshots (may contain bank UI)
+fail-*.png
+
+# Dependencies
+node_modules/
