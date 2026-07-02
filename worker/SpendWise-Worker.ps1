@@ -2,9 +2,9 @@
 #  SpendWise Worker — tray control panel for the bank sync agent
 #  by Hananel Sabag
 #
-#  A small always-available window that runs the sync agent on an interval,
-#  shows live status + run history, and can launch itself on Windows startup.
-#  Minimises to the system tray — no taskbar clutter.
+#  Runs the sync agent on a 30-minute interval, shows live status, run
+#  history, and a next-run countdown. Minimises to the system tray.
+#  Optional "launch on Windows startup" so it survives reboots.
 # ============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -18,81 +18,77 @@ $AgentDir  = Split-Path -Parent $WorkerDir
 $AgentJs   = Join-Path $AgentDir 'src\agent.js'
 $LogFile   = Join-Path $AgentDir 'agent.log'
 $StateFile = Join-Path $AgentDir '.worker-state.json'
+$IconFile  = Join-Path $WorkerDir 'spendwise.ico'
 $IntervalMinutes = 30
 
-# ── Palette (SpendWise dark theme) ──────────────────────────────────────────
+# ── Palette (SpendWise) ─────────────────────────────────────────────────────
 $cBg      = [System.Drawing.Color]::FromArgb(15, 23, 42)     # slate-900
 $cCard    = [System.Drawing.Color]::FromArgb(30, 41, 59)     # slate-800
 $cCard2   = [System.Drawing.Color]::FromArgb(51, 65, 85)     # slate-700
 $cText    = [System.Drawing.Color]::FromArgb(241, 245, 249)  # slate-100
 $cMuted   = [System.Drawing.Color]::FromArgb(148, 163, 184)  # slate-400
 $cIndigo  = [System.Drawing.Color]::FromArgb(99, 102, 241)   # indigo-500
-$cIndigoH = [System.Drawing.Color]::FromArgb(79, 70, 229)    # indigo-600
 $cGreen   = [System.Drawing.Color]::FromArgb(16, 185, 129)
 $cGray    = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $cRed     = [System.Drawing.Color]::FromArgb(239, 68, 68)
 $cBlue    = [System.Drawing.Color]::FromArgb(59, 130, 246)
+$cAmber   = [System.Drawing.Color]::FromArgb(245, 158, 11)
 
-$fRegular = New-Object System.Drawing.Font('Segoe UI', 9)
-$fBold    = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-$fTitle   = New-Object System.Drawing.Font('Segoe UI Semibold', 13)
-$fBig     = New-Object System.Drawing.Font('Segoe UI', 20, [System.Drawing.FontStyle]::Bold)
-$fSmall   = New-Object System.Drawing.Font('Segoe UI', 8)
+$fRegular = New-Object System.Drawing.Font('Segoe UI', 9.5)
+$fBold    = New-Object System.Drawing.Font('Segoe UI Semibold', 10)
+$fTitle   = New-Object System.Drawing.Font('Segoe UI Semibold', 14)
+$fStat    = New-Object System.Drawing.Font('Segoe UI', 16, [System.Drawing.FontStyle]::Bold)
+$fSmall   = New-Object System.Drawing.Font('Segoe UI', 8.5)
 
 # ── State ───────────────────────────────────────────────────────────────────
-$script:running   = $false
+$script:running     = $false
 $script:sessionRuns = 0
-$script:busy      = $false
-$script:userQuit  = $false
+$script:busy        = $false
+$script:userQuit    = $false
+$script:nextRunAt   = $null
 
 function Load-State {
   if (Test-Path $StateFile) {
     try { return Get-Content $StateFile -Raw | ConvertFrom-Json } catch { }
   }
-  return [pscustomobject]@{ totalRuns = 0; lastResult = ''; lastRun = '' }
+  return [pscustomobject]@{ totalRuns = 0 }
 }
 function Save-State($s) {
   try { $s | ConvertTo-Json | Set-Content $StateFile -Encoding utf8 } catch { }
 }
 $script:state = Load-State
 
-# ── Rounded-panel helper ────────────────────────────────────────────────────
-function New-Card($x, $y, $w, $h, $color) {
-  $p = New-Object System.Windows.Forms.Panel
-  $p.Location = New-Object System.Drawing.Point($x, $y)
-  $p.Size     = New-Object System.Drawing.Size($w, $h)
-  $p.BackColor = $color
-  return $p
-}
+# ── Icon (real SpendWise logo, with graceful fallback) ──────────────────────
+$appIcon = $null
+try { if (Test-Path $IconFile) { $appIcon = New-Object System.Drawing.Icon($IconFile) } } catch { }
+if (-not $appIcon) { $appIcon = [System.Drawing.SystemIcons]::Application }
 
 # ── Form ────────────────────────────────────────────────────────────────────
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'SpendWise Worker'
-$form.Size = New-Object System.Drawing.Size(380, 500)
+$form.ClientSize = New-Object System.Drawing.Size(380, 508)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
 $form.BackColor = $cBg
 $form.ForeColor = $cText
 $form.Font = $fRegular
+$form.Icon = $appIcon
 
-# Header
-$hdrIcon = New-Object System.Windows.Forms.Label
-$hdrIcon.Text = 'S'
-$hdrIcon.Font = $fBig
-$hdrIcon.ForeColor = [System.Drawing.Color]::White
-$hdrIcon.BackColor = $cIndigo
-$hdrIcon.TextAlign = 'MiddleCenter'
-$hdrIcon.Size = New-Object System.Drawing.Size(44, 44)
-$hdrIcon.Location = New-Object System.Drawing.Point(20, 18)
-$form.Controls.Add($hdrIcon)
+# ── Header: logo + title ────────────────────────────────────────────────────
+$logoBox = New-Object System.Windows.Forms.PictureBox
+$logoBox.Size = New-Object System.Drawing.Size(44, 44)
+$logoBox.Location = New-Object System.Drawing.Point(20, 18)
+$logoBox.SizeMode = 'Zoom'
+try { $logoBox.Image = $appIcon.ToBitmap() } catch { }
+$form.Controls.Add($logoBox)
 
 $hdrTitle = New-Object System.Windows.Forms.Label
 $hdrTitle.Text = 'SpendWise Worker'
 $hdrTitle.Font = $fTitle
 $hdrTitle.ForeColor = $cText
 $hdrTitle.AutoSize = $true
-$hdrTitle.Location = New-Object System.Drawing.Point(74, 22)
+$hdrTitle.Location = New-Object System.Drawing.Point(74, 20)
 $form.Controls.Add($hdrTitle)
 
 $hdrSub = New-Object System.Windows.Forms.Label
@@ -100,19 +96,22 @@ $hdrSub.Text = 'Bank sync agent'
 $hdrSub.Font = $fSmall
 $hdrSub.ForeColor = $cMuted
 $hdrSub.AutoSize = $true
-$hdrSub.Location = New-Object System.Drawing.Point(76, 46)
+$hdrSub.Location = New-Object System.Drawing.Point(76, 48)
 $form.Controls.Add($hdrSub)
 
-# Status card
-$statusCard = New-Card 20 78 336 92 $cCard
+# ── Status card ─────────────────────────────────────────────────────────────
+$statusCard = New-Object System.Windows.Forms.Panel
+$statusCard.Location = New-Object System.Drawing.Point(20, 80)
+$statusCard.Size = New-Object System.Drawing.Size(340, 108)
+$statusCard.BackColor = $cCard
 $form.Controls.Add($statusCard)
 
 $dot = New-Object System.Windows.Forms.Label
 $dot.Text = [char]0x25CF
-$dot.Font = New-Object System.Drawing.Font('Segoe UI', 16)
+$dot.Font = New-Object System.Drawing.Font('Segoe UI', 15)
 $dot.ForeColor = $cGray
 $dot.AutoSize = $true
-$dot.Location = New-Object System.Drawing.Point(16, 14)
+$dot.Location = New-Object System.Drawing.Point(14, 12)
 $statusCard.Controls.Add($dot)
 
 $statusText = New-Object System.Windows.Forms.Label
@@ -120,49 +119,68 @@ $statusText.Text = 'Stopped'
 $statusText.Font = $fBold
 $statusText.ForeColor = $cText
 $statusText.AutoSize = $true
-$statusText.Location = New-Object System.Drawing.Point(44, 18)
+$statusText.Location = New-Object System.Drawing.Point(42, 17)
 $statusCard.Controls.Add($statusText)
+
+$nextRunLbl = New-Object System.Windows.Forms.Label
+$nextRunLbl.Text = ''
+$nextRunLbl.Font = $fSmall
+$nextRunLbl.ForeColor = $cMuted
+$nextRunLbl.AutoSize = $true
+$nextRunLbl.TextAlign = 'TopRight'
+$nextRunLbl.Location = New-Object System.Drawing.Point(210, 20)
+$statusCard.Controls.Add($nextRunLbl)
 
 $lastResult = New-Object System.Windows.Forms.Label
 $lastResult.Text = 'Not run yet'
 $lastResult.Font = $fRegular
 $lastResult.ForeColor = $cMuted
-$lastResult.AutoSize = $true
-$lastResult.Location = New-Object System.Drawing.Point(46, 42)
+$lastResult.AutoSize = $false
+$lastResult.Size = New-Object System.Drawing.Size(312, 22)
+$lastResult.Location = New-Object System.Drawing.Point(44, 48)
 $statusCard.Controls.Add($lastResult)
 
 $lastRun = New-Object System.Windows.Forms.Label
 $lastRun.Text = ''
 $lastRun.Font = $fSmall
-$lastRun.ForeColor = $cMuted
+$lastRun.ForeColor = $cGray
 $lastRun.AutoSize = $true
-$lastRun.Location = New-Object System.Drawing.Point(46, 64)
+$lastRun.Location = New-Object System.Drawing.Point(44, 76)
 $statusCard.Controls.Add($lastRun)
 
-# Stats row (two mini cards)
-$statA = New-Card 20 182 162 64 $cCard
-$form.Controls.Add($statA)
-$statAnum = New-Object System.Windows.Forms.Label
-$statAnum.Text = '0'; $statAnum.Font = $fTitle; $statAnum.ForeColor = $cText
-$statAnum.AutoSize = $true; $statAnum.Location = New-Object System.Drawing.Point(14, 10)
-$statA.Controls.Add($statAnum)
-$statAlbl = New-Object System.Windows.Forms.Label
-$statAlbl.Text = 'Runs this session'; $statAlbl.Font = $fSmall; $statAlbl.ForeColor = $cMuted
-$statAlbl.AutoSize = $true; $statAlbl.Location = New-Object System.Drawing.Point(14, 40)
-$statA.Controls.Add($statAlbl)
+# ── Stats row ───────────────────────────────────────────────────────────────
+function New-StatCard($x, $labelText) {
+  $panel = New-Object System.Windows.Forms.Panel
+  $panel.Location = New-Object System.Drawing.Point($x, 200)
+  $panel.Size = New-Object System.Drawing.Size(164, 68)
+  $panel.BackColor = $cCard
 
-$statB = New-Card 194 182 162 64 $cCard
-$form.Controls.Add($statB)
-$statBnum = New-Object System.Windows.Forms.Label
-$statBnum.Text = "$($script:state.totalRuns)"; $statBnum.Font = $fTitle; $statBnum.ForeColor = $cText
-$statBnum.AutoSize = $true; $statBnum.Location = New-Object System.Drawing.Point(14, 10)
-$statB.Controls.Add($statBnum)
-$statBlbl = New-Object System.Windows.Forms.Label
-$statBlbl.Text = 'Total runs'; $statBlbl.Font = $fSmall; $statBlbl.ForeColor = $cMuted
-$statBlbl.AutoSize = $true; $statBlbl.Location = New-Object System.Drawing.Point(14, 40)
-$statB.Controls.Add($statBlbl)
+  $num = New-Object System.Windows.Forms.Label
+  $num.Text = '0'
+  $num.Font = $fStat
+  $num.ForeColor = $cText
+  $num.AutoSize = $true
+  $num.Location = New-Object System.Drawing.Point(14, 8)
+  $panel.Controls.Add($num)
 
-# Start/Stop button
+  $lbl = New-Object System.Windows.Forms.Label
+  $lbl.Text = $labelText
+  $lbl.Font = $fSmall
+  $lbl.ForeColor = $cMuted
+  $lbl.AutoSize = $true
+  $lbl.Location = New-Object System.Drawing.Point(14, 42)
+  $panel.Controls.Add($lbl)
+
+  return @{ Panel = $panel; Num = $num }
+}
+
+$statA = New-StatCard 20 'Runs this session'
+$statB = New-StatCard 196 'Total runs'
+$statB.Num.Text = "$($script:state.totalRuns)"
+$form.Controls.Add($statA.Panel)
+$form.Controls.Add($statB.Panel)
+
+# ── Buttons ─────────────────────────────────────────────────────────────────
 $btnMain = New-Object System.Windows.Forms.Button
 $btnMain.Text = 'Start Worker'
 $btnMain.Font = $fBold
@@ -170,12 +188,11 @@ $btnMain.ForeColor = [System.Drawing.Color]::White
 $btnMain.BackColor = $cIndigo
 $btnMain.FlatStyle = 'Flat'
 $btnMain.FlatAppearance.BorderSize = 0
-$btnMain.Size = New-Object System.Drawing.Size(336, 42)
-$btnMain.Location = New-Object System.Drawing.Point(20, 258)
+$btnMain.Size = New-Object System.Drawing.Size(340, 44)
+$btnMain.Location = New-Object System.Drawing.Point(20, 282)
 $btnMain.Cursor = 'Hand'
 $form.Controls.Add($btnMain)
 
-# Run-now (secondary)
 $btnRun = New-Object System.Windows.Forms.Button
 $btnRun.Text = 'Sync once now'
 $btnRun.Font = $fRegular
@@ -183,40 +200,39 @@ $btnRun.ForeColor = $cText
 $btnRun.BackColor = $cCard2
 $btnRun.FlatStyle = 'Flat'
 $btnRun.FlatAppearance.BorderSize = 0
-$btnRun.Size = New-Object System.Drawing.Size(336, 34)
-$btnRun.Location = New-Object System.Drawing.Point(20, 308)
+$btnRun.Size = New-Object System.Drawing.Size(340, 36)
+$btnRun.Location = New-Object System.Drawing.Point(20, 334)
 $btnRun.Cursor = 'Hand'
 $form.Controls.Add($btnRun)
 
-# Startup toggle
+# ── Startup toggle + info ───────────────────────────────────────────────────
 $chkStartup = New-Object System.Windows.Forms.CheckBox
 $chkStartup.Text = ' Launch automatically when Windows starts'
 $chkStartup.Font = $fRegular
 $chkStartup.ForeColor = $cMuted
 $chkStartup.AutoSize = $true
-$chkStartup.Location = New-Object System.Drawing.Point(22, 356)
+$chkStartup.Location = New-Object System.Drawing.Point(22, 386)
 $form.Controls.Add($chkStartup)
 
 $intervalLbl = New-Object System.Windows.Forms.Label
-$intervalLbl.Text = "Checks for work every $IntervalMinutes minutes. Only contacts your bank when there's a sync to run (max ~2/day)."
+$intervalLbl.Text = "Checks for work every $IntervalMinutes minutes. Only contacts your bank when a sync is queued (max ~2/day per bank)."
 $intervalLbl.Font = $fSmall
 $intervalLbl.ForeColor = $cMuted
-$intervalLbl.Size = New-Object System.Drawing.Size(336, 40)
-$intervalLbl.Location = New-Object System.Drawing.Point(22, 384)
+$intervalLbl.Size = New-Object System.Drawing.Size(340, 34)
+$intervalLbl.Location = New-Object System.Drawing.Point(22, 416)
 $form.Controls.Add($intervalLbl)
 
-# Footer
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'by Hananel Sabag'
+$footer.Text = 'SpendWise · by Hananel Sabag'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
-$footer.Location = New-Object System.Drawing.Point(22, 430)
+$footer.Location = New-Object System.Drawing.Point(22, 462)
 $form.Controls.Add($footer)
 
 # ── Tray icon ───────────────────────────────────────────────────────────────
 $tray = New-Object System.Windows.Forms.NotifyIcon
-$tray.Icon = [System.Drawing.SystemIcons]::Application
+$tray.Icon = $appIcon
 $tray.Text = 'SpendWise Worker'
 $tray.Visible = $true
 
@@ -227,7 +243,7 @@ $menu.Items.Add('-') | Out-Null
 $miQuit = $menu.Items.Add('Quit')
 $tray.ContextMenuStrip = $menu
 
-# ── Status helpers ──────────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────────────
 function Set-Status($text, $color) {
   $statusText.Text = $text
   $dot.ForeColor = $color
@@ -235,31 +251,36 @@ function Set-Status($text, $color) {
 
 function Parse-LastResult {
   if (-not (Test-Path $LogFile)) { return }
-  try {
-    $tail = Get-Content $LogFile -Tail 40 -ErrorAction Stop
-  } catch { return }
+  try { $tail = Get-Content $LogFile -Tail 40 -ErrorAction Stop } catch { return }
   $done = $tail | Where-Object { $_ -match 'DONE .* (\d+) new, (\d+) skipped' } | Select-Object -Last 1
   $none = $tail | Where-Object { $_ -match 'no pending jobs' } | Select-Object -Last 1
   $fail = $tail | Where-Object { $_ -match 'FAILED|FATAL' } | Select-Object -Last 1
-  if ($done) {
-    if ($done -match '(\d+) new, (\d+) skipped') {
-      $lastResult.Text = "Last sync: $($Matches[1]) new, $($Matches[2]) skipped"
-      $lastResult.ForeColor = $cGreen
-    }
+  if ($done -and ($done -match '(\d+) new, (\d+) skipped')) {
+    $lastResult.Text = "Last sync: $($Matches[1]) new transactions, $($Matches[2]) already known"
+    $lastResult.ForeColor = $cGreen
   } elseif ($fail) {
-    $lastResult.Text = 'Last run failed — open the app to check'
+    $lastResult.Text = 'Last run had a failure - see agent.log'
     $lastResult.ForeColor = $cRed
   } elseif ($none) {
-    $lastResult.Text = 'Up to date — no new work'
+    $lastResult.Text = 'Up to date - no work was waiting'
     $lastResult.ForeColor = $cMuted
   }
 }
 
-# ── Run the agent (fire-and-forget, hidden) ─────────────────────────────────
+function Update-NextRun {
+  if ($script:running -and $script:nextRunAt) {
+    $mins = [math]::Max(0, [math]::Round(($script:nextRunAt - (Get-Date)).TotalMinutes))
+    $nextRunLbl.Text = "next check in ${mins}m"
+  } else {
+    $nextRunLbl.Text = ''
+  }
+}
+
+# ── Run the agent (hidden, non-blocking) ────────────────────────────────────
 function Invoke-AgentRun {
   if ($script:busy) { return }
   $script:busy = $true
-  Set-Status 'Syncing…' $cBlue
+  Set-Status 'Syncing...' $cBlue
   $lastRun.Text = "Started $(Get-Date -Format 'HH:mm:ss')"
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -271,22 +292,19 @@ function Invoke-AgentRun {
   try {
     $proc = [System.Diagnostics.Process]::Start($psi)
   } catch {
-    Set-Status 'Error: Node not found' $cRed
+    Set-Status 'Node.js not found' $cRed
     $lastResult.Text = 'Install Node.js, then try again'
     $lastResult.ForeColor = $cRed
     $script:busy = $false
     return
   }
 
-  # Count the run
   $script:sessionRuns++
-  $statAnum.Text = "$($script:sessionRuns)"
+  $statA.Num.Text = "$($script:sessionRuns)"
   $script:state.totalRuns = [int]$script:state.totalRuns + 1
-  $statBnum.Text = "$($script:state.totalRuns)"
-  $script:state.lastRun = (Get-Date).ToString('s')
+  $statB.Num.Text = "$($script:state.totalRuns)"
   Save-State $script:state
 
-  # Poll for completion without freezing the UI
   $waitTimer = New-Object System.Windows.Forms.Timer
   $waitTimer.Interval = 1500
   $waitTimer.Add_Tick({
@@ -301,28 +319,40 @@ function Invoke-AgentRun {
   $waitTimer.Start()
 }
 
-# ── Interval loop ───────────────────────────────────────────────────────────
+# ── Interval loop + countdown ───────────────────────────────────────────────
 $loopTimer = New-Object System.Windows.Forms.Timer
 $loopTimer.Interval = $IntervalMinutes * 60 * 1000
-$loopTimer.Add_Tick({ Invoke-AgentRun })
+$loopTimer.Add_Tick({
+  $script:nextRunAt = (Get-Date).AddMinutes($IntervalMinutes)
+  Invoke-AgentRun
+})
+
+$countdownTimer = New-Object System.Windows.Forms.Timer
+$countdownTimer.Interval = 30 * 1000
+$countdownTimer.Add_Tick({ Update-NextRun })
+$countdownTimer.Start()
 
 function Start-Worker {
   $script:running = $true
   $btnMain.Text = 'Stop Worker'
   $btnMain.BackColor = $cCard2
   Set-Status 'Running' $cGreen
+  $script:nextRunAt = (Get-Date).AddMinutes($IntervalMinutes)
+  Update-NextRun
   $loopTimer.Start()
-  Invoke-AgentRun   # run once immediately
+  Invoke-AgentRun   # immediate first run
 }
 function Stop-Worker {
   $script:running = $false
   $loopTimer.Stop()
+  $script:nextRunAt = $null
+  Update-NextRun
   $btnMain.Text = 'Start Worker'
   $btnMain.BackColor = $cIndigo
   Set-Status 'Stopped' $cGray
 }
 
-# ── Windows startup (Run key → the hidden launcher) ─────────────────────────
+# ── Windows startup registration ────────────────────────────────────────────
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunName = 'SpendWiseWorker'
 $Launcher = Join-Path $WorkerDir 'SpendWise-Worker.vbs'
@@ -333,7 +363,9 @@ function Test-Startup {
 }
 function Set-Startup($on) {
   if ($on) {
-    Set-ItemProperty -Path $RunKey -Name $RunName -Value ('wscript.exe "' + $Launcher + '"')
+    # "autostart" makes the worker begin its sync loop immediately after a
+    # reboot, minimised to the tray — no click needed.
+    Set-ItemProperty -Path $RunKey -Name $RunName -Value ('wscript.exe "' + $Launcher + '" autostart')
   } else {
     Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue
   }
@@ -350,8 +382,7 @@ $miRun.Add_Click({ Invoke-AgentRun })
 $miQuit.Add_Click({ $script:userQuit = $true; $tray.Visible = $false; $form.Close() })
 $tray.Add_MouseDoubleClick({ $form.Show(); $form.WindowState = 'Normal'; $form.Activate() })
 
-# Close (X) button → hide to tray so the worker keeps running.
-# Only a real Quit (tray menu) sets userQuit and lets the form close.
+# Close (X) hides to tray so the worker keeps running; Quit (tray menu) exits.
 $form.Add_FormClosing({
   param($s, $e)
   if ($script:userQuit -ne $true) {
@@ -361,8 +392,15 @@ $form.Add_FormClosing({
   }
 })
 
-# Show last known result on open
 Parse-LastResult
+
+# Auto-start the worker loop when launched at Windows startup (silent path),
+# so a reboot resumes syncing without any click.
+if ($env:SPENDWISE_WORKER_AUTOSTART -eq '1' -or ($args -contains '-AutoStart')) {
+  Start-Worker
+  $form.WindowState = 'Minimized'
+  $form.Hide()
+}
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 [System.Windows.Forms.Application]::Run($form)
