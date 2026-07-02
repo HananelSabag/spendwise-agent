@@ -29,6 +29,13 @@ const ENV_CREDS = {
       nationalID: process.env.YAHAV_NATIONAL_ID,
     }),
   },
+  leumi: {
+    required: ['LEUMI_USERNAME', 'LEUMI_PASSWORD'],
+    build: () => ({
+      username: process.env.LEUMI_USERNAME,
+      password: process.env.LEUMI_PASSWORD,
+    }),
+  },
   isracard: {
     required: ['ISRACARD_ID', 'ISRACARD_CARD6', 'ISRACARD_PASSWORD'],
     build: () => ({

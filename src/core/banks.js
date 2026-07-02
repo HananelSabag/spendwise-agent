@@ -12,6 +12,11 @@ export const BANKS = {
     warmupUrl: 'https://login.yahav.co.il/login/',
     credFields: ['username', 'password', 'nationalID'],
   },
+  leumi: {
+    companyId: 'leumi',
+    warmupUrl: 'https://www.leumi.co.il/',
+    credFields: ['username', 'password'],
+  },
   isracard: {
     companyId: 'isracard',
     warmupUrl: 'https://digital.isracard.co.il/personalarea/Login',
