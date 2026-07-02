@@ -4,9 +4,13 @@ agent-private.key
 
 # Runtime state
 .agent-state.json
+.worker-state.json
 .agent.lock
 *.log
 *.log.*.bak
+
+# Built worker executable (users build their own if they want one)
+worker/*.exe
 
 # Scraped data (financial info stays local)
 scraped-data/
