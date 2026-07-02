@@ -30,15 +30,35 @@ export function markScraped(connectionId) {
   save(state);
 }
 
+/** Is a process with this PID actually alive right now? (works on Windows too) */
+function isPidAlive(pid) {
+  if (!pid || !Number.isFinite(pid)) return false;
+  try {
+    // Signal 0 doesn't kill anything — it just probes whether the PID exists
+    // and we have permission to signal it. Throws ESRCH if it doesn't.
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // exists but we can't signal it — still alive
+  }
+}
+
 /**
  * Acquire the single-instance lock. Returns false when another live
- * instance holds it; steals locks older than LOCK_STALE_MS.
+ * instance holds it. Self-healing: if the PID recorded in the lock file is
+ * no longer running (crash, killed via Task Manager, power loss), the lock
+ * is stolen immediately instead of waiting out LOCK_STALE_MS.
  */
 export function acquireLock() {
   try {
     if (fs.existsSync(LOCK_FILE)) {
-      const age = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
-      if (age < LOCK_STALE_MS) return false;
+      const recordedPid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8').trim(), 10);
+      if (isPidAlive(recordedPid)) {
+        // Still respect the hard ceiling in case of PID reuse after reboot.
+        const age = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
+        if (age < LOCK_STALE_MS) return false;
+      }
+      // Recorded process is dead (or the lock is ancient) — safe to steal.
     }
     fs.writeFileSync(LOCK_FILE, String(process.pid));
     return true;

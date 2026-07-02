@@ -1,10 +1,21 @@
 # ============================================================================
-#  SpendWise Worker — tray control panel for the bank sync agent
+#  SpendWise Worker - tray control panel for the bank sync agent
 #  by Hananel Sabag
 #
-#  Runs the sync agent on a 30-minute interval, shows live status, run
-#  history, and a next-run countdown. Minimises to the system tray.
-#  Optional "launch on Windows startup" so it survives reboots.
+#  A small always-available window that runs the sync agent on an interval,
+#  shows live status + run history, and can launch itself on Windows startup.
+#  Minimises to the system tray - no taskbar clutter.
+#
+#  Reliability features:
+#   - True single-instance enforcement (named Mutex) - a second launch shows
+#     a clear message and exits instead of creating a confusing second GUI.
+#   - Hang watchdog - a run that exceeds MaxRunMinutes is force-killed
+#     (whole process tree: node.exe + any spawned chrome.exe) and reported,
+#     instead of the UI showing "Syncing..." forever.
+#   - "Clean up stuck processes" - on demand, kills every node.exe/chrome.exe
+#     that belongs to this agent (matched by command line), anywhere on the
+#     system, plus clears a stale lock file. For when something got left
+#     behind by a crash, a force-quit, or a previous session.
 # ============================================================================
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -12,16 +23,32 @@ Add-Type -AssemblyName System.Drawing
 
 $ErrorActionPreference = 'Stop'
 
-# ── Paths ───────────────────────────────────────────────────────────────────
+# -- Single-instance guard (must happen before any UI is created) -----------
+$MutexName = 'Global\SpendWiseWorkerSingleton'
+$createdNew = $false
+$mutex = New-Object System.Threading.Mutex($true, $MutexName, [ref]$createdNew)
+if (-not $createdNew) {
+  [System.Windows.Forms.MessageBox]::Show(
+    "SpendWise Worker is already running." + [Environment]::NewLine + "Check your system tray (bottom-right, near the clock).",
+    'SpendWise Worker',
+    [System.Windows.Forms.MessageBoxButtons]::OK,
+    [System.Windows.Forms.MessageBoxIcon]::Information
+  ) | Out-Null
+  exit 0
+}
+
+# -- Paths -------------------------------------------------------------------
 $WorkerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AgentDir  = Split-Path -Parent $WorkerDir
 $AgentJs   = Join-Path $AgentDir 'src\agent.js'
 $LogFile   = Join-Path $AgentDir 'agent.log'
 $StateFile = Join-Path $AgentDir '.worker-state.json'
+$LockFile  = Join-Path $AgentDir '.agent.lock'
 $IconFile  = Join-Path $WorkerDir 'spendwise.ico'
 $IntervalMinutes = 30
+$MaxRunMinutes   = 6   # a scrape+report never legitimately takes this long
 
-# ── Palette (SpendWise) ─────────────────────────────────────────────────────
+# -- Palette (SpendWise) -----------------------------------------------------
 $cBg      = [System.Drawing.Color]::FromArgb(15, 23, 42)     # slate-900
 $cCard    = [System.Drawing.Color]::FromArgb(30, 41, 59)     # slate-800
 $cCard2   = [System.Drawing.Color]::FromArgb(51, 65, 85)     # slate-700
@@ -40,12 +67,15 @@ $fTitle   = New-Object System.Drawing.Font('Segoe UI Semibold', 14)
 $fStat    = New-Object System.Drawing.Font('Segoe UI', 16, [System.Drawing.FontStyle]::Bold)
 $fSmall   = New-Object System.Drawing.Font('Segoe UI', 8.5)
 
-# ── State ───────────────────────────────────────────────────────────────────
-$script:running     = $false
-$script:sessionRuns = 0
-$script:busy        = $false
-$script:userQuit    = $false
-$script:nextRunAt   = $null
+# -- State -------------------------------------------------------------------
+$script:running       = $false
+$script:sessionRuns   = 0
+$script:busy          = $false
+$script:userQuit      = $false
+$script:nextRunAt     = $null
+$script:currentProc   = $null
+$script:currentPid    = $null
+$script:runStartedAt  = $null
 
 function Load-State {
   if (Test-Path $StateFile) {
@@ -58,15 +88,90 @@ function Save-State($s) {
 }
 $script:state = Load-State
 
-# ── Icon (real SpendWise logo, with graceful fallback) ──────────────────────
-$appIcon = $null
-try { if (Test-Path $IconFile) { $appIcon = New-Object System.Drawing.Icon($IconFile) } } catch { }
-if (-not $appIcon) { $appIcon = [System.Drawing.SystemIcons]::Application }
+# -- Icon: load from bytes (never locks the file, never throws the app down) -
+function Get-AppIcon {
+  try {
+    if (Test-Path $IconFile) {
+      $bytes = [System.IO.File]::ReadAllBytes($IconFile)
+      $ms = New-Object System.IO.MemoryStream(,$bytes)
+      return New-Object System.Drawing.Icon($ms)
+    }
+  } catch { }
+  return [System.Drawing.SystemIcons]::Application
+}
+$appIcon = Get-AppIcon
 
-# ── Form ────────────────────────────────────────────────────────────────────
+# -- Process-tree helpers -----------------------------------------------------
+# Kill a process and every descendant (node.exe -> chrome.exe -> chrome
+# renderer children). WMI gives us ParentProcessId to walk the tree.
+function Stop-ProcessTree([int]$ProcessId) {
+  $killed = 0
+  try {
+    $children = Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue
+    foreach ($child in $children) {
+      $killed += Stop-ProcessTree -ProcessId $child.ProcessId
+    }
+  } catch { }
+  try {
+    Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+    $killed++
+  } catch { }
+  return $killed
+}
+
+# Find every node.exe running OUR agent.js, and every chrome.exe running from
+# OUR profile dir, regardless of who started them (this session, a previous
+# one, or a crashed worker). Matched by command line, not by our own PID
+# tracking, so it also catches truly orphaned processes.
+function Find-AgentProcesses {
+  $matches = @()
+  try {
+    $procs = Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='chrome.exe'" -ErrorAction SilentlyContinue
+    foreach ($p in $procs) {
+      $cmd = $p.CommandLine
+      if (-not $cmd) { continue }
+      if ($cmd -like "*$AgentJs*" -or $cmd -like '*.chrome-profile*') {
+        $matches += $p
+      }
+    }
+  } catch { }
+  return $matches
+}
+
+function Invoke-ZombieCleanup {
+  $report = @()
+
+  # 1. Whatever THIS worker is currently tracking
+  if ($script:currentPid) {
+    $n = Stop-ProcessTree -ProcessId $script:currentPid
+    if ($n -gt 0) { $report += "$n process(es) from the active run" }
+    $script:currentPid = $null
+    $script:currentProc = $null
+    $script:busy = $false
+  }
+
+  # 2. Anything else matching our agent, anywhere on the system
+  $orphans = Find-AgentProcesses
+  $orphanCount = 0
+  foreach ($p in $orphans) {
+    try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $orphanCount++ } catch { }
+  }
+  if ($orphanCount -gt 0) { $report += "$orphanCount orphaned process(es)" }
+
+  # 3. Stale lock file - agent.js is PID-aware and self-heals this too, but
+  #    clear it here for instant feedback instead of waiting for the next run.
+  if (Test-Path $LockFile) {
+    try { Remove-Item $LockFile -Force; $report += 'stale lock file' } catch { }
+  }
+
+  if ($report.Count -eq 0) { return 'Nothing to clean up - all clear.' }
+  return "Cleaned up: $($report -join ', ')."
+}
+
+# -- Form --------------------------------------------------------------------
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'SpendWise Worker'
-$form.ClientSize = New-Object System.Drawing.Size(380, 508)
+$form.ClientSize = New-Object System.Drawing.Size(380, 566)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -75,7 +180,7 @@ $form.ForeColor = $cText
 $form.Font = $fRegular
 $form.Icon = $appIcon
 
-# ── Header: logo + title ────────────────────────────────────────────────────
+# -- Header: logo + title ----------------------------------------------------
 $logoBox = New-Object System.Windows.Forms.PictureBox
 $logoBox.Size = New-Object System.Drawing.Size(44, 44)
 $logoBox.Location = New-Object System.Drawing.Point(20, 18)
@@ -99,7 +204,7 @@ $hdrSub.AutoSize = $true
 $hdrSub.Location = New-Object System.Drawing.Point(76, 48)
 $form.Controls.Add($hdrSub)
 
-# ── Status card ─────────────────────────────────────────────────────────────
+# -- Status card -------------------------------------------------------------
 $statusCard = New-Object System.Windows.Forms.Panel
 $statusCard.Location = New-Object System.Drawing.Point(20, 80)
 $statusCard.Size = New-Object System.Drawing.Size(340, 108)
@@ -148,7 +253,7 @@ $lastRun.AutoSize = $true
 $lastRun.Location = New-Object System.Drawing.Point(44, 76)
 $statusCard.Controls.Add($lastRun)
 
-# ── Stats row ───────────────────────────────────────────────────────────────
+# -- Stats row ---------------------------------------------------------------
 function New-StatCard($x, $labelText) {
   $panel = New-Object System.Windows.Forms.Panel
   $panel.Location = New-Object System.Drawing.Point($x, 200)
@@ -180,7 +285,7 @@ $statB.Num.Text = "$($script:state.totalRuns)"
 $form.Controls.Add($statA.Panel)
 $form.Controls.Add($statB.Panel)
 
-# ── Buttons ─────────────────────────────────────────────────────────────────
+# -- Buttons -----------------------------------------------------------------
 $btnMain = New-Object System.Windows.Forms.Button
 $btnMain.Text = 'Start Worker'
 $btnMain.Font = $fBold
@@ -205,32 +310,45 @@ $btnRun.Location = New-Object System.Drawing.Point(20, 334)
 $btnRun.Cursor = 'Hand'
 $form.Controls.Add($btnRun)
 
-# ── Startup toggle + info ───────────────────────────────────────────────────
+$btnClean = New-Object System.Windows.Forms.Button
+$btnClean.Text = 'Clean up stuck processes'
+$btnClean.Font = $fSmall
+$btnClean.ForeColor = $cAmber
+$btnClean.BackColor = $cBg
+$btnClean.FlatStyle = 'Flat'
+$btnClean.FlatAppearance.BorderSize = 1
+$btnClean.FlatAppearance.BorderColor = $cCard2
+$btnClean.Size = New-Object System.Drawing.Size(340, 30)
+$btnClean.Location = New-Object System.Drawing.Point(20, 378)
+$btnClean.Cursor = 'Hand'
+$form.Controls.Add($btnClean)
+
+# -- Startup toggle + info ---------------------------------------------------
 $chkStartup = New-Object System.Windows.Forms.CheckBox
 $chkStartup.Text = ' Launch automatically when Windows starts'
 $chkStartup.Font = $fRegular
 $chkStartup.ForeColor = $cMuted
 $chkStartup.AutoSize = $true
-$chkStartup.Location = New-Object System.Drawing.Point(22, 386)
+$chkStartup.Location = New-Object System.Drawing.Point(22, 424)
 $form.Controls.Add($chkStartup)
 
 $intervalLbl = New-Object System.Windows.Forms.Label
-$intervalLbl.Text = "Checks for work every $IntervalMinutes minutes. Only contacts your bank when a sync is queued (max ~2/day per bank)."
+$intervalLbl.Text = "Checks for work every $IntervalMinutes minutes. Only contacts your bank when a sync is queued (max ~2/day per bank). A stuck sync is auto-cancelled after $MaxRunMinutes minutes."
 $intervalLbl.Font = $fSmall
 $intervalLbl.ForeColor = $cMuted
-$intervalLbl.Size = New-Object System.Drawing.Size(340, 34)
-$intervalLbl.Location = New-Object System.Drawing.Point(22, 416)
+$intervalLbl.Size = New-Object System.Drawing.Size(340, 48)
+$intervalLbl.Location = New-Object System.Drawing.Point(22, 454)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise · by Hananel Sabag'
+$footer.Text = 'SpendWise - by Hananel Sabag'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
-$footer.Location = New-Object System.Drawing.Point(22, 462)
+$footer.Location = New-Object System.Drawing.Point(22, 522)
 $form.Controls.Add($footer)
 
-# ── Tray icon ───────────────────────────────────────────────────────────────
+# -- Tray icon ---------------------------------------------------------------
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Icon = $appIcon
 $tray.Text = 'SpendWise Worker'
@@ -239,11 +357,12 @@ $tray.Visible = $true
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $miOpen = $menu.Items.Add('Open')
 $miRun  = $menu.Items.Add('Sync once now')
+$miClean = $menu.Items.Add('Clean up stuck processes')
 $menu.Items.Add('-') | Out-Null
 $miQuit = $menu.Items.Add('Quit')
 $tray.ContextMenuStrip = $menu
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------------------
 function Set-Status($text, $color) {
   $statusText.Text = $text
   $dot.ForeColor = $color
@@ -276,10 +395,31 @@ function Update-NextRun {
   }
 }
 
-# ── Run the agent (hidden, non-blocking) ────────────────────────────────────
+# -- Hang watchdog ------------------------------------------------------------
+$watchdogTimer = New-Object System.Windows.Forms.Timer
+$watchdogTimer.Interval = 15 * 1000
+$watchdogTimer.Add_Tick({
+  if (-not $script:busy -or -not $script:runStartedAt) { return }
+  $elapsedMin = ((Get-Date) - $script:runStartedAt).TotalMinutes
+  if ($elapsedMin -ge $MaxRunMinutes) {
+    $killed = if ($script:currentPid) { Stop-ProcessTree -ProcessId $script:currentPid } else { 0 }
+    $script:busy = $false
+    $script:currentProc = $null
+    $script:currentPid = $null
+    $lastResult.Text = "Timed out after ${MaxRunMinutes}m - cancelled ($killed process(es) stopped)"
+    $lastResult.ForeColor = $cRed
+    $lastRun.Text = "Last run $(Get-Date -Format 'dd/MM HH:mm')"
+    if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
+    $tray.ShowBalloonTip(4000, 'SpendWise Worker', "A sync got stuck and was cancelled after ${MaxRunMinutes} minutes.", 'Warning')
+  }
+})
+$watchdogTimer.Start()
+
+# -- Run the agent (hidden, non-blocking) ------------------------------------
 function Invoke-AgentRun {
   if ($script:busy) { return }
   $script:busy = $true
+  $script:runStartedAt = Get-Date
   Set-Status 'Syncing...' $cBlue
   $lastRun.Text = "Started $(Get-Date -Format 'HH:mm:ss')"
 
@@ -296,8 +436,12 @@ function Invoke-AgentRun {
     $lastResult.Text = 'Install Node.js, then try again'
     $lastResult.ForeColor = $cRed
     $script:busy = $false
+    $script:runStartedAt = $null
     return
   }
+
+  $script:currentProc = $proc
+  $script:currentPid = $proc.Id
 
   $script:sessionRuns++
   $statA.Num.Text = "$($script:sessionRuns)"
@@ -308,9 +452,13 @@ function Invoke-AgentRun {
   $waitTimer = New-Object System.Windows.Forms.Timer
   $waitTimer.Interval = 1500
   $waitTimer.Add_Tick({
+    if (-not $script:busy) { $waitTimer.Stop(); return }  # watchdog already handled it
     if ($proc.HasExited) {
       $waitTimer.Stop()
       $script:busy = $false
+      $script:currentProc = $null
+      $script:currentPid = $null
+      $script:runStartedAt = $null
       Parse-LastResult
       $lastRun.Text = "Last run $(Get-Date -Format 'dd/MM HH:mm')"
       if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
@@ -319,7 +467,7 @@ function Invoke-AgentRun {
   $waitTimer.Start()
 }
 
-# ── Interval loop + countdown ───────────────────────────────────────────────
+# -- Interval loop + countdown -----------------------------------------------
 $loopTimer = New-Object System.Windows.Forms.Timer
 $loopTimer.Interval = $IntervalMinutes * 60 * 1000
 $loopTimer.Add_Tick({
@@ -352,7 +500,7 @@ function Stop-Worker {
   Set-Status 'Stopped' $cGray
 }
 
-# ── Windows startup registration ────────────────────────────────────────────
+# -- Windows startup registration --------------------------------------------
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunName = 'SpendWiseWorker'
 $Launcher = Join-Path $WorkerDir 'SpendWise-Worker.vbs'
@@ -364,7 +512,7 @@ function Test-Startup {
 function Set-Startup($on) {
   if ($on) {
     # "autostart" makes the worker begin its sync loop immediately after a
-    # reboot, minimised to the tray — no click needed.
+    # reboot, minimised to the tray - no click needed.
     Set-ItemProperty -Path $RunKey -Name $RunName -Value ('wscript.exe "' + $Launcher + '" autostart')
   } else {
     Remove-ItemProperty -Path $RunKey -Name $RunName -ErrorAction SilentlyContinue
@@ -372,13 +520,23 @@ function Set-Startup($on) {
 }
 $chkStartup.Checked = Test-Startup
 
-# ── Wiring ──────────────────────────────────────────────────────────────────
+# -- Wiring ------------------------------------------------------------------
 $btnMain.Add_Click({ if ($script:running) { Stop-Worker } else { Start-Worker } })
 $btnRun.Add_Click({ Invoke-AgentRun })
+$btnClean.Add_Click({
+  $btnClean.Enabled = $false
+  $msg = Invoke-ZombieCleanup
+  $lastResult.Text = $msg
+  $lastResult.ForeColor = $cAmber
+  if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
+  $btnClean.Enabled = $true
+  [System.Windows.Forms.MessageBox]::Show($msg, 'Clean up stuck processes', 'OK', 'Information') | Out-Null
+})
 $chkStartup.Add_Click({ Set-Startup $chkStartup.Checked })
 
 $miOpen.Add_Click({ $form.Show(); $form.WindowState = 'Normal'; $form.Activate() })
 $miRun.Add_Click({ Invoke-AgentRun })
+$miClean.Add_Click({ $btnClean.PerformClick() })
 $miQuit.Add_Click({ $script:userQuit = $true; $tray.Visible = $false; $form.Close() })
 $tray.Add_MouseDoubleClick({ $form.Show(); $form.WindowState = 'Normal'; $form.Activate() })
 
@@ -389,6 +547,9 @@ $form.Add_FormClosing({
     $e.Cancel = $true
     $form.Hide()
     $tray.ShowBalloonTip(2000, 'SpendWise Worker', 'Still running in the tray.', 'Info')
+  } else {
+    # Real quit: don't leave a sync running headless with no UI to watch it.
+    if ($script:currentPid) { Stop-ProcessTree -ProcessId $script:currentPid | Out-Null }
   }
 })
 
@@ -402,6 +563,12 @@ if ($env:SPENDWISE_WORKER_AUTOSTART -eq '1' -or ($args -contains '-AutoStart')) 
   $form.Hide()
 }
 
-[System.Windows.Forms.Application]::EnableVisualStyles()
-[System.Windows.Forms.Application]::Run($form)
-$tray.Visible = $false
+try {
+  [System.Windows.Forms.Application]::EnableVisualStyles()
+  [System.Windows.Forms.Application]::Run($form)
+} finally {
+  $tray.Visible = $false
+  if ($script:currentPid) { Stop-ProcessTree -ProcessId $script:currentPid | Out-Null }
+  $mutex.ReleaseMutex()
+  $mutex.Dispose()
+}
