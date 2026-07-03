@@ -81,12 +81,14 @@ async function main() {
 
     const privateKey = fs.readFileSync(PRIVATE_KEY_FILE, 'utf8').trim();
 
-    // Cooldown gate: fail jobs we refuse to run so the server sees them
+    // Cooldown gate: decline jobs we refuse to run so the server sees them.
+    // transient:true → the server records the decline without touching the
+    // connection's consecutive_failures (a cooldown is not a real failure).
     const runnable = [];
     for (const job of jobs) {
       if (inCooldown(job.connection_id)) {
         log.warn(`job ${job.id} (conn ${job.connection_id}) inside ${COOLDOWN_HOURS}h cooldown — declining`);
-        await reportFailure(job.id, `Agent cooldown: scraped less than ${COOLDOWN_HOURS}h ago`)
+        await reportFailure(job.id, `Agent cooldown: scraped less than ${COOLDOWN_HOURS}h ago`, { transient: true })
           .catch((e) => log.error(`report failed — ${e.message}`));
       } else {
         runnable.push(job);

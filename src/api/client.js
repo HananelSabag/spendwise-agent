@@ -51,11 +51,17 @@ export function reportSuccess(jobId, accounts) {
   return request('POST', `/bank-agent/jobs/${jobId}/result`, { success: true, accounts });
 }
 
-/** Report a failed scrape for a job. */
-export function reportFailure(jobId, error) {
+/**
+ * Report a failed scrape for a job.
+ * `transient: true` marks expected, self-resolving declines (e.g. the local
+ * scrape cooldown) — the server records the job as failed but does NOT count
+ * it toward the connection's consecutive_failures / auto-pause threshold.
+ */
+export function reportFailure(jobId, error, { transient = false } = {}) {
   return request('POST', `/bank-agent/jobs/${jobId}/result`, {
     success: false,
     error: String(error).slice(0, 500),
+    transient,
   });
 }
 
