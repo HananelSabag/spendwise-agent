@@ -41,10 +41,12 @@ Set-Content -Path $tmpSrc -Value $src -Encoding UTF8
 
 # Also stamp the version into the worker script's footer label so it's
 # visible in the running window itself, not just in exe file properties.
-# BUILD_VERSION_PLACEHOLDER lives in SpendWise-Worker.ps1's footer text.
+# Matches both the neutral text (first build) and an already-stamped footer
+# from a previous build (every build after that) so this keeps re-stamping
+# instead of silently doing nothing from the second build onward.
 $workerPs1 = Join-Path $WorkerDir 'SpendWise-Worker.ps1'
 $workerContent = Get-Content $workerPs1 -Raw
-$stamped = $workerContent -replace "'SpendWise . by Hananel Sabag'", "'SpendWise . by Hananel Sabag . build $version'"
+$stamped = $workerContent -replace 'SpendWise \. by Hananel Sabag(\s*\.\s*build\s*[0-9.]+)?', "SpendWise . by Hananel Sabag . build $version"
 if ($stamped -eq $workerContent) {
   Write-Output "NOTE: footer stamp pattern not found in SpendWise-Worker.ps1 - version won't show in-window (exe file properties still have it)."
 } else {

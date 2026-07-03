@@ -341,7 +341,7 @@ $intervalLbl.Location = New-Object System.Drawing.Point(22, 454)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.3.1005'
+$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.3.1101'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
@@ -449,12 +449,19 @@ function Invoke-AgentRun {
   $statB.Num.Text = "$($script:state.totalRuns)"
   Save-State $script:state
 
+  # NOTE: this Tick handler runs long after Invoke-AgentRun has returned, from
+  # a dead call frame - PowerShell script blocks do NOT close over a function's
+  # local variables (no lexical capture without .GetNewClosure()), so any bare
+  # local var referenced here (e.g. $proc, $waitTimer) resolves to $null at
+  # invoke time, not compile time. Use $script:currentProc (real state) and
+  # $this (the Timer instance itself, auto-bound by the WinForms event) instead
+  # of the locals - both are safely resolvable from any call context.
   $waitTimer = New-Object System.Windows.Forms.Timer
   $waitTimer.Interval = 1500
   $waitTimer.Add_Tick({
-    if (-not $script:busy) { $waitTimer.Stop(); return }  # watchdog already handled it
-    if ($proc.HasExited) {
-      $waitTimer.Stop()
+    if (-not $script:busy) { $this.Stop(); return }  # watchdog already handled it
+    if ($script:currentProc.HasExited) {
+      $this.Stop()
       $script:busy = $false
       $script:currentProc = $null
       $script:currentPid = $null
@@ -572,4 +579,5 @@ try {
   $mutex.ReleaseMutex()
   $mutex.Dispose()
 }
+
 
