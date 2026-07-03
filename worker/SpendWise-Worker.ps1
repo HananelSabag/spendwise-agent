@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  SpendWise Worker - tray control panel for the bank sync agent
 #  by Hananel Sabag
 #
@@ -341,7 +341,7 @@ $intervalLbl.Location = New-Object System.Drawing.Point(22, 454)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise - by Hananel Sabag'
+$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.3.1005'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
@@ -572,3 +572,4 @@ try {
   $mutex.ReleaseMutex()
   $mutex.Dispose()
 }
+

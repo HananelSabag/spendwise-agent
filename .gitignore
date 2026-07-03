@@ -9,8 +9,10 @@ agent-private.key
 *.log
 *.log.*.bak
 
-# Built worker executable (users build their own if they want one)
+# Built worker executable — reproducible via worker/Build-Exe.ps1 (uses the
+# C# compiler built into every Windows install, no external tools needed)
 worker/*.exe
+worker/build/*.generated.cs
 
 # Scraped data (financial info stays local)
 scraped-data/
