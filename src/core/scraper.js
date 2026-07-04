@@ -81,6 +81,11 @@ export function mapAccounts(source, rawAccounts) {
       if (txn.identifier !== undefined && txn.identifier !== null) {
         mapped.identifier = String(txn.identifier);
       }
+      // Source-provided category text (e.g. Max supplies `category`). This is
+      // the only category signal in the new model — the server stores it as
+      // transactions.raw_category. Blank/undefined → null (never invent one).
+      const rawCategory = String(txn.category ?? '').trim();
+      mapped.raw_category = rawCategory || null;
       return [mapped];
     });
 
