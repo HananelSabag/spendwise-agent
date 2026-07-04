@@ -11,6 +11,21 @@ import { assertKnownBank } from './banks.js';
 
 const RETRYABLE = ['TIMEOUT', 'GENERIC', 'GENERAL_ERROR'];
 
+// Hard wall-clock cap per scrape attempt. israeli-bank-scrapers takes a
+// `timeout` option but does NOT guarantee scrape() settles within it — a stuck
+// page or Cloudflare loop can hang indefinitely. Without this, one hung bank
+// (e.g. the 2nd job in a run) would never report back, leaving the connection
+// "syncing" forever on the client and blocking further syncs. Env-overridable.
+const HARD_TIMEOUT_MS = parseInt(process.env.SCRAPE_HARD_TIMEOUT_MS, 10) || 150000;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} exceeded ${Math.round(ms / 1000)}s hard timeout`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /** How far back to scrape. BACKFILL_MONTHS overrides for one-off backfills. */
 export function scrapeWindowStart() {
   const d = new Date();
@@ -38,7 +53,16 @@ export async function scrapeBank(source, credentials, browser, fromDate = scrape
       timeout: 120000,
       storeFailureScreenShotPath: path.join(ROOT_DIR, `fail-${source}.png`),
     });
-    return scraper.scrape(credentials);
+    // Guard the scrape with a hard wall-clock timeout. If the library hangs
+    // past it, surface a retryable TIMEOUT result (instead of hanging forever)
+    // so the retry-once path runs and, failing that, the job reports a failure.
+    const scrapePromise = scraper.scrape(credentials);
+    scrapePromise.catch(() => {}); // it may settle after we've timed out — don't crash
+    try {
+      return await withTimeout(scrapePromise, HARD_TIMEOUT_MS, `${source} scrape`);
+    } catch (err) {
+      return { success: false, errorType: 'TIMEOUT', errorMessage: err.message };
+    }
   };
 
   let result = await attempt();

@@ -48,8 +48,32 @@ async function launch() {
       '--disable-blink-features=AutomationControlled',
       '--disable-extensions',
       '--window-size=1280,900',
+      // Persistent profile otherwise restores the previous run's tabs and pops
+      // a "Chrome didn't shut down correctly" bubble — both leave stray
+      // about:blank tabs staring at the user. Suppress them.
+      '--hide-crash-restore-bubble',
+      '--disable-session-crashed-bubble',
     ],
   });
+}
+
+/**
+ * Close every tab but one (blanked). The scrapers run with
+ * skipCloseBrowser:true, so their statement/login pages stay open in the
+ * shared browser and pile up across jobs. Call this after each job (and once
+ * at run start, to clear any tabs the persistent profile restored) so the user
+ * never sees a stack of leftover about:blank tabs. Best-effort — never throws.
+ */
+export async function closeExtraPages(browser) {
+  try {
+    const pages = await browser.pages();
+    for (let i = 1; i < pages.length; i++) {
+      await pages[i].close().catch(() => {});
+    }
+    if (pages[0]) await pages[0].goto('about:blank').catch(() => {});
+  } catch {
+    /* best-effort cleanup */
+  }
 }
 
 /**

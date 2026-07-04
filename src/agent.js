@@ -23,7 +23,7 @@ import { log, rotateIfNeeded, logger } from './utils/log.js';
 import { inCooldown, markScraped, acquireLock, releaseLock, COOLDOWN_HOURS } from './utils/state.js';
 import { open as openEnvelope } from './crypto/sealed.js';
 import { BANKS, assertCredentialShape } from './core/banks.js';
-import { withBrowser, warmup } from './core/browser.js';
+import { withBrowser, warmup, closeExtraPages } from './core/browser.js';
 import { scrapeBank, mapAccounts } from './core/scraper.js';
 import { saveScrape } from './core/cache.js';
 import { claimJobs, reportSuccess, reportFailure, notify } from './api/client.js';
@@ -97,12 +97,19 @@ async function main() {
     if (runnable.length === 0) return;
 
     await withBrowser(async (browser) => {
+      // Clear any tabs the persistent profile restored from a previous run.
+      await closeExtraPages(browser);
+
       let first = true;
       for (const job of runnable) {
         try {
           if (!first) {
-            // Human-like pause between banks
-            const pause = 2 * 60_000 + Math.floor(Math.random() * 3 * 60_000);
+            // Short human-like gap between DIFFERENT banks. This is not the
+            // lockout guard (that's the per-connection 3h cooldown), just a
+            // pause so we don't fire back-to-back logins. Kept short so a
+            // manual multi-account "Sync Now" doesn't look frozen. Overridable.
+            const base = parseInt(process.env.INTER_JOB_PAUSE_MS, 10) || 15000;
+            const pause = base + Math.floor(Math.random() * 20_000);
             log.info(`pausing ${Math.round(pause / 1000)}s before next job`);
             await sleep(pause);
           }
@@ -113,6 +120,9 @@ async function main() {
           await notify(`Job ${job.id} (${job.bank_source}) failed: ${err.message}`);
           await reportFailure(job.id, err.message)
             .catch((e) => log.error(`report failed — ${e.message}`));
+        } finally {
+          // Close the scraper's leftover pages so tabs don't pile up job-to-job.
+          await closeExtraPages(browser);
         }
       }
     });
