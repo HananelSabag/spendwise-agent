@@ -14,6 +14,10 @@ agent-private.key
 worker/*.exe
 worker/build/*.generated.cs
 
+# Packaged runnable copy of the worker (exe + logo + shortcuts) — a local,
+# organized "app" bundle built from worker/; regenerable, not source.
+Worker Windows App/
+
 # Scraped data (financial info stays local)
 scraped-data/
 
