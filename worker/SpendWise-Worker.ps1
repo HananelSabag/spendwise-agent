@@ -45,6 +45,7 @@ $LogFile   = Join-Path $AgentDir 'agent.log'
 $StateFile = Join-Path $AgentDir '.worker-state.json'
 $LockFile  = Join-Path $AgentDir '.agent.lock'
 $IconFile  = Join-Path $WorkerDir 'spendwise.ico'
+$LogoPng   = Join-Path $WorkerDir 'logo-source.png'   # 1024x1024 source logo
 $IntervalMinutes = 30
 $MaxRunMinutes   = 6   # a scrape+report never legitimately takes this long
 
@@ -55,6 +56,7 @@ $cCard2   = [System.Drawing.Color]::FromArgb(51, 65, 85)     # slate-700
 $cText    = [System.Drawing.Color]::FromArgb(241, 245, 249)  # slate-100
 $cMuted   = [System.Drawing.Color]::FromArgb(148, 163, 184)  # slate-400
 $cIndigo  = [System.Drawing.Color]::FromArgb(99, 102, 241)   # indigo-500
+$cIndigoDeep = [System.Drawing.Color]::FromArgb(79, 70, 229) # indigo-600 (header gradient)
 $cGreen   = [System.Drawing.Color]::FromArgb(16, 185, 129)
 $cGray    = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $cRed     = [System.Drawing.Color]::FromArgb(239, 68, 68)
@@ -88,8 +90,58 @@ function Save-State($s) {
 }
 $script:state = Load-State
 
-# -- Icon: load from bytes (never locks the file, never throws the app down) -
+# -- Logo / icon helpers ------------------------------------------------------
+# High-quality downscale of the 1024px source PNG to a square bitmap. Rendering
+# straight from the PNG (instead of Icon.ToBitmap(), which upsizes a tiny 16/32
+# frame) is what makes the in-window logo crisp instead of a noisy square.
+function Get-LogoBitmap([int]$size) {
+  $img = [System.Drawing.Image]::FromFile($LogoPng)
+  try {
+    $bmp = New-Object System.Drawing.Bitmap $size, $size
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.DrawImage($img, 0, 0, $size, $size)
+    $g.Dispose()
+    return $bmp
+  } finally { $img.Dispose() }
+}
+
+# Rounded-square version of the logo for the window header (soft, modern).
+function Get-LogoRounded([int]$size, [int]$radius) {
+  try {
+    $src = Get-LogoBitmap $size
+    $out = New-Object System.Drawing.Bitmap $size, $size
+    $g = [System.Drawing.Graphics]::FromImage($out)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $d = $radius * 2
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $path.AddArc(0, 0, $d, $d, 180, 90)
+    $path.AddArc($size - $d, 0, $d, $d, 270, 90)
+    $path.AddArc($size - $d, $size - $d, $d, $d, 0, 90)
+    $path.AddArc(0, $size - $d, $d, $d, 90, 90)
+    $path.CloseFigure()
+    $g.SetClip($path)
+    $g.DrawImage($src, 0, 0, $size, $size)
+    $g.Dispose(); $path.Dispose(); $src.Dispose()
+    return $out
+  } catch { return $null }
+}
+
+# App icon: build a real HICON from the source PNG. GDI+ can't always hand
+# WinForms a taskbar-size (32px) frame out of a PNG-compressed .ico — the tray's
+# 16px loads, but the taskbar/title-bar falls back to the generic Windows icon.
+# An HICON rasterized from a bitmap always shows correctly everywhere.
 function Get-AppIcon {
+  try {
+    if (Test-Path $LogoPng) {
+      $bmp = Get-LogoBitmap 64
+      $hicon = $bmp.GetHicon()
+      $bmp.Dispose()
+      return [System.Drawing.Icon]::FromHandle($hicon)
+    }
+  } catch { }
   try {
     if (Test-Path $IconFile) {
       $bytes = [System.IO.File]::ReadAllBytes($IconFile)
@@ -180,29 +232,50 @@ $form.ForeColor = $cText
 $form.Font = $fRegular
 $form.Icon = $appIcon
 
-# -- Header: logo + title ----------------------------------------------------
+# -- Header: gradient strip with logo + title --------------------------------
+$header = New-Object System.Windows.Forms.Panel
+$header.Location = New-Object System.Drawing.Point(0, 0)
+$header.Size = New-Object System.Drawing.Size(380, 76)
+$header.Add_Paint({
+  $g = $_.Graphics
+  $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $rect = New-Object System.Drawing.Rectangle 0, 0, $header.Width, $header.Height
+  $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $cIndigoDeep, $cBg, 15.0)
+  $g.FillRectangle($brush, $rect)
+  $brush.Dispose()
+  # hairline separator at the bottom edge
+  $pen = New-Object System.Drawing.Pen($cCard2, 1)
+  $g.DrawLine($pen, 0, ($header.Height - 1), $header.Width, ($header.Height - 1))
+  $pen.Dispose()
+})
+$form.Controls.Add($header)
+
 $logoBox = New-Object System.Windows.Forms.PictureBox
-$logoBox.Size = New-Object System.Drawing.Size(44, 44)
-$logoBox.Location = New-Object System.Drawing.Point(20, 18)
+$logoBox.Size = New-Object System.Drawing.Size(46, 46)
+$logoBox.Location = New-Object System.Drawing.Point(20, 15)
 $logoBox.SizeMode = 'Zoom'
-try { $logoBox.Image = $appIcon.ToBitmap() } catch { }
-$form.Controls.Add($logoBox)
+$logoBox.BackColor = [System.Drawing.Color]::Transparent
+$logoImg = Get-LogoRounded 46 11
+if ($logoImg) { $logoBox.Image = $logoImg } else { try { $logoBox.Image = Get-LogoBitmap 46 } catch { } }
+$header.Controls.Add($logoBox)
 
 $hdrTitle = New-Object System.Windows.Forms.Label
 $hdrTitle.Text = 'SpendWise Worker'
 $hdrTitle.Font = $fTitle
-$hdrTitle.ForeColor = $cText
+$hdrTitle.ForeColor = [System.Drawing.Color]::White
+$hdrTitle.BackColor = [System.Drawing.Color]::Transparent
 $hdrTitle.AutoSize = $true
-$hdrTitle.Location = New-Object System.Drawing.Point(74, 20)
-$form.Controls.Add($hdrTitle)
+$hdrTitle.Location = New-Object System.Drawing.Point(78, 17)
+$header.Controls.Add($hdrTitle)
 
 $hdrSub = New-Object System.Windows.Forms.Label
 $hdrSub.Text = 'Bank sync agent'
 $hdrSub.Font = $fSmall
-$hdrSub.ForeColor = $cMuted
+$hdrSub.ForeColor = [System.Drawing.Color]::FromArgb(199, 210, 254)  # indigo-200
+$hdrSub.BackColor = [System.Drawing.Color]::Transparent
 $hdrSub.AutoSize = $true
-$hdrSub.Location = New-Object System.Drawing.Point(76, 48)
-$form.Controls.Add($hdrSub)
+$hdrSub.Location = New-Object System.Drawing.Point(80, 45)
+$header.Controls.Add($hdrSub)
 
 # -- Status card -------------------------------------------------------------
 $statusCard = New-Object System.Windows.Forms.Panel
@@ -341,7 +414,7 @@ $intervalLbl.Location = New-Object System.Drawing.Point(22, 454)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.3.1101'
+$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.4.1635'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
@@ -579,5 +652,6 @@ try {
   $mutex.ReleaseMutex()
   $mutex.Dispose()
 }
+
 
 
