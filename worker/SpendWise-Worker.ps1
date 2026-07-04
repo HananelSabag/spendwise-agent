@@ -63,11 +63,27 @@ $cRed     = [System.Drawing.Color]::FromArgb(239, 68, 68)
 $cBlue    = [System.Drawing.Color]::FromArgb(59, 130, 246)
 $cAmber   = [System.Drawing.Color]::FromArgb(245, 158, 11)
 
-$fRegular = New-Object System.Drawing.Font('Segoe UI', 9.5)
-$fBold    = New-Object System.Drawing.Font('Segoe UI Semibold', 10)
-$fTitle   = New-Object System.Drawing.Font('Segoe UI Semibold', 14)
-$fStat    = New-Object System.Drawing.Font('Segoe UI', 16, [System.Drawing.FontStyle]::Bold)
-$fSmall   = New-Object System.Drawing.Font('Segoe UI', 8.5)
+# Fonts — Windows 11 "Segoe UI Variable" is softer and rounder than the plain
+# "Segoe UI" that made the panel feel blocky. Fall back gracefully on older
+# Windows. "Display" is tuned for big text (title/numbers), "Text" for body.
+$script:installedFonts = ([System.Drawing.Text.InstalledFontCollection]::new()).Families.Name
+function New-AppFont([single]$size, [System.Drawing.FontStyle]$style, [string[]]$prefer) {
+  foreach ($name in $prefer) {
+    if ($script:installedFonts -contains $name) {
+      try { return New-Object System.Drawing.Font($name, $size, $style) } catch { }
+    }
+  }
+  return New-Object System.Drawing.Font('Segoe UI', $size, $style)
+}
+$famDisplay = @('Segoe UI Variable Display', 'Segoe UI')
+$famText    = @('Segoe UI Variable Text', 'Segoe UI')
+
+$fRegular = New-AppFont 10.0 ([System.Drawing.FontStyle]::Regular) $famText
+$fBold    = New-AppFont 10.5 ([System.Drawing.FontStyle]::Bold)    $famText
+$fTitle   = New-AppFont 15.0 ([System.Drawing.FontStyle]::Bold)    $famDisplay
+$fStat    = New-AppFont 21.0 ([System.Drawing.FontStyle]::Bold)    $famDisplay
+$fSmall   = New-AppFont 8.75 ([System.Drawing.FontStyle]::Regular) $famText
+$fPill    = New-AppFont 7.75 ([System.Drawing.FontStyle]::Bold)    $famText
 
 # -- State -------------------------------------------------------------------
 $script:running       = $false
@@ -84,6 +100,21 @@ function Load-State {
     try { return Get-Content $StateFile -Raw | ConvertFrom-Json } catch { }
   }
   return [pscustomobject]@{ totalRuns = 0 }
+}
+
+# Lifetime traffic totals, recomputed from the whole agent log (cheap, and
+# avoids drift/double-counting a running counter would suffer). Every run is
+# one server check; a "DONE" line means a bank was actually synced.
+function Get-SyncTotals {
+  $newTxns = 0; $syncs = 0
+  if (Test-Path $LogFile) {
+    try {
+      Get-Content $LogFile -ErrorAction Stop | ForEach-Object {
+        if ($_ -match 'DONE .* (\d+) new, (\d+) skipped') { $newTxns += [int]$Matches[1]; $syncs++ }
+      }
+    } catch { }
+  }
+  return @{ newTxns = $newTxns; syncs = $syncs }
 }
 function Save-State($s) {
   try { $s | ConvertTo-Json | Set-Content $StateFile -Encoding utf8 } catch { }
@@ -326,19 +357,27 @@ $lastRun.AutoSize = $true
 $lastRun.Location = New-Object System.Drawing.Point(44, 76)
 $statusCard.Controls.Add($lastRun)
 
-# -- Stats row ---------------------------------------------------------------
-function New-StatCard($x, $labelText) {
+# -- Stats row (traffic at a glance) -----------------------------------------
+# A colored accent bar down the left edge of each card gives the numbers some
+# life and ties them to their meaning (indigo = talking to the server,
+# green = money data actually pulled in).
+function New-StatCard($x, $labelText, $numColor, $accent) {
   $panel = New-Object System.Windows.Forms.Panel
   $panel.Location = New-Object System.Drawing.Point($x, 200)
   $panel.Size = New-Object System.Drawing.Size(164, 68)
   $panel.BackColor = $cCard
+  $panel.Add_Paint({
+    $b = New-Object System.Drawing.SolidBrush $accent
+    $_.Graphics.FillRectangle($b, (New-Object System.Drawing.Rectangle 0, 0, 3, 68))
+    $b.Dispose()
+  }.GetNewClosure())
 
   $num = New-Object System.Windows.Forms.Label
   $num.Text = '0'
   $num.Font = $fStat
-  $num.ForeColor = $cText
+  $num.ForeColor = $numColor
   $num.AutoSize = $true
-  $num.Location = New-Object System.Drawing.Point(14, 8)
+  $num.Location = New-Object System.Drawing.Point(14, 6)
   $panel.Controls.Add($num)
 
   $lbl = New-Object System.Windows.Forms.Label
@@ -346,15 +385,16 @@ function New-StatCard($x, $labelText) {
   $lbl.Font = $fSmall
   $lbl.ForeColor = $cMuted
   $lbl.AutoSize = $true
-  $lbl.Location = New-Object System.Drawing.Point(14, 42)
+  $lbl.Location = New-Object System.Drawing.Point(14, 44)
   $panel.Controls.Add($lbl)
 
   return @{ Panel = $panel; Num = $num }
 }
 
-$statA = New-StatCard 20 'Runs this session'
-$statB = New-StatCard 196 'Total runs'
-$statB.Num.Text = "$($script:state.totalRuns)"
+$statA = New-StatCard 20  'Server checks'       $cIndigo $cIndigo
+$statB = New-StatCard 196 'Transactions synced' $cGreen  $cGreen
+$statA.Num.Text = "$($script:state.totalRuns)"
+$statB.Num.Text = "$((Get-SyncTotals).newTxns)"
 $form.Controls.Add($statA.Panel)
 $form.Controls.Add($statB.Panel)
 
@@ -414,7 +454,7 @@ $intervalLbl.Location = New-Object System.Drawing.Point(22, 454)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.4.1635'
+$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.4.1732'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
@@ -488,6 +528,27 @@ $watchdogTimer.Add_Tick({
 })
 $watchdogTimer.Start()
 
+# -- Pulsing status dot (a little life while it's alive) ----------------------
+# When the worker is running (or mid-sync) the dot breathes between its full
+# colour and a dimmed version; when stopped, Set-Status paints it static gray.
+$script:pulseOn = $false
+$pulseTimer = New-Object System.Windows.Forms.Timer
+$pulseTimer.Interval = 560
+$pulseTimer.Add_Tick({
+  if (-not $script:running -and -not $script:busy) { return }
+  $script:pulseOn = -not $script:pulseOn
+  $base = if ($script:busy) { $cBlue } else { $cGreen }
+  if ($script:pulseOn) {
+    $dot.ForeColor = $base
+  } else {
+    $dot.ForeColor = [System.Drawing.Color]::FromArgb(
+      [int]($base.R * 0.45 + $cCard.R * 0.55),
+      [int]($base.G * 0.45 + $cCard.G * 0.55),
+      [int]($base.B * 0.45 + $cCard.B * 0.55))
+  }
+})
+$pulseTimer.Start()
+
 # -- Run the agent (hidden, non-blocking) ------------------------------------
 function Invoke-AgentRun {
   if ($script:busy) { return }
@@ -516,10 +577,11 @@ function Invoke-AgentRun {
   $script:currentProc = $proc
   $script:currentPid = $proc.Id
 
+  # Every run is one server check. Transactions-synced (statB) is recomputed
+  # from the log when the run finishes (see the completion handler below).
   $script:sessionRuns++
-  $statA.Num.Text = "$($script:sessionRuns)"
   $script:state.totalRuns = [int]$script:state.totalRuns + 1
-  $statB.Num.Text = "$($script:state.totalRuns)"
+  $statA.Num.Text = "$($script:state.totalRuns)"
   Save-State $script:state
 
   # NOTE: this Tick handler runs long after Invoke-AgentRun has returned, from
@@ -540,7 +602,8 @@ function Invoke-AgentRun {
       $script:currentPid = $null
       $script:runStartedAt = $null
       Parse-LastResult
-      $lastRun.Text = "Last run $(Get-Date -Format 'dd/MM HH:mm')"
+      $statB.Num.Text = "$((Get-SyncTotals).newTxns)"
+      $lastRun.Text = "Last contact $(Get-Date -Format 'HH:mm') · $($script:sessionRuns) checks this session"
       if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
     }
   })
@@ -652,6 +715,7 @@ try {
   $mutex.ReleaseMutex()
   $mutex.Dispose()
 }
+
 
 
 
