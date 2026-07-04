@@ -15,10 +15,10 @@ index ab8e48d..36543ca 100644
    }
  }
 diff --git a/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js b/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js
-index ce60e06..10b0f2f 100644
+index ce60e06..88c130f 100644
 --- a/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js
 +++ b/node_modules/israeli-bank-scrapers/lib/scrapers/yahav.js
-@@ -170,6 +170,77 @@ async function selectPortfolio(page, targetID) {
+@@ -170,6 +170,96 @@ async function selectPortfolio(page, targetID) {
    if (!clicked) throw new Error(`Portfolio option not found for ID: ${targetID}`);
    await (0, _elementsInteractions.waitUntilElementDisappear)(page, '.loading-bar-spinner');
  }
@@ -28,13 +28,49 @@ index ce60e06..10b0f2f 100644
 +// analyze-balance-html.js can find the exact selector without re-running.
 +async function extractBalanceAndSnapshot(page, portfolioID) {
 +  const result = await page.evaluate(() => {
++    // Balances can be negative (overdraft) and legitimately zero, so only
++    // reject non-numeric/empty — never treat 0 as "not found".
 +    function parseILS(str) {
-+      if (!str) return null;
-+      const n = parseFloat(str.replace(/[^\d.-]/g, '').replace(/,/g, ''));
-+      return isNaN(n) || n === 0 ? null : n;
++      if (str == null) return null;
++      const cleaned = String(str).replace(/[₪\s‎‏]/g, '').replace(/,/g, '');
++      if (!/\d/.test(cleaned)) return null;
++      const n = parseFloat(cleaned);
++      return isNaN(n) ? null : n;
 +    }
 +
-+    // Priority selector list (most likely for Yahav BaNCS Digital)
++    // Yahav BaNCS Digital does NOT expose a standalone "current balance"
++    // element. The account statement table carries a running "יתרה משוערכת"
++    // (estimated balance) as its last column, and the FIRST data row
++    // (.row.each-item) is the most recent transaction — so that row's balance
++    // cell is the current account balance. (Verified against captured portal
++    // HTML: 120-353778 → 14,632.55, 120-511509 → 12,274.84.)
++    function fromStatement() {
++      const rows = document.querySelectorAll('.row.each-item');
++      if (!rows.length) return null;
++
++      // Balance column index from the header row (cell text contains יתרה).
++      let balIdx = -1;
++      const header = document.querySelector('.row.header');
++      if (header) {
++        const cells = Array.from(header.children);
++        balIdx = cells.findIndex((c) => (c.textContent || '').includes('יתרה'));
++      }
++
++      // Scan rows top-down; the newest row with a parseable balance wins.
++      for (const row of rows) {
++        const cells = Array.from(row.children);
++        if (!cells.length) continue;
++        const cell = (balIdx >= 0 && cells[balIdx]) ? cells[balIdx] : cells[cells.length - 1];
++        const n = parseILS(cell && cell.textContent);
++        if (n !== null) return { balance: n, via: `statement-row[col=${balIdx}]` };
++      }
++      return null;
++    }
++
++    const st = fromStatement();
++    if (st) return { ...st, html: document.documentElement.outerHTML };
++
++    // Fallbacks — kept for portal variants that DO expose a balance element.
 +    const selectors = [
 +      'span.portfolio-balance',
 +      '.portfolio-balance',
@@ -42,7 +78,6 @@ index ce60e06..10b0f2f 100644
 +      '.account-balance',
 +      '[class*="balance"] .amount',
 +      '[class*="balance"]',
-+      '[class*="amount"]',
 +      '.total-balance',
 +      '.current-balance',
 +    ];
@@ -54,23 +89,6 @@ index ce60e06..10b0f2f 100644
 +      }
 +    }
 +
-+    // Text walk: find any element containing "יתרה" and look for a nearby number
-+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-+    while (walk.nextNode()) {
-+      const t = walk.currentNode.textContent.trim();
-+      if (!t.includes('יתרה')) continue;
-+      let node = walk.currentNode.parentElement;
-+      for (let d = 0; d < 5 && node; d++, node = node.parentElement) {
-+        for (const sib of [node.nextElementSibling, node.previousElementSibling]) {
-+          if (!sib) continue;
-+          const n = parseILS(sib.textContent);
-+          if (n !== null && n > 0 && n < 50000000) {
-+            return { balance: n, via: `yitra-sibling(depth=${d})`, html: document.documentElement.outerHTML };
-+          }
-+        }
-+      }
-+    }
-+
 +    // No match — still return full HTML so we can find the right selector offline
 +    return { balance: null, via: null, html: document.documentElement.outerHTML };
 +  });
@@ -79,8 +97,9 @@ index ce60e06..10b0f2f 100644
 +  try {
 +    const fs = require('fs');
 +    const path = require('path');
-+    // Walk up from lib/scrapers/ → lib/ → package root → repo root → scraped-data/
-+    const dataDir = path.join(__dirname, '..', '..', '..', 'scraped-data');
++    // Walk up from node_modules/israeli-bank-scrapers/lib/scrapers/ →
++    // lib → israeli-bank-scrapers → node_modules → repo root → scraped-data/
++    const dataDir = path.join(__dirname, '..', '..', '..', '..', 'scraped-data');
 +    fs.mkdirSync(dataDir, { recursive: true });
 +    const safeID = String(portfolioID).replace(/[^a-z0-9]/gi, '_');
 +    fs.writeFileSync(
@@ -96,7 +115,7 @@ index ce60e06..10b0f2f 100644
  async function fetchAccounts(page, startDate, options) {
    // Snapshot up front: the dropdown only lists unselected portfolios, so after the first
    // switch we would lose any not yet scraped.
-@@ -184,9 +255,20 @@ async function fetchAccounts(page, startDate, options) {
+@@ -184,9 +274,20 @@ async function fetchAccounts(page, startDate, options) {
        await selectPortfolio(page, portfolioID);
      }
      await (0, _elementsInteractions.waitUntilElementFound)(page, ACCOUNT_DETAILS_SELECTOR, true);
