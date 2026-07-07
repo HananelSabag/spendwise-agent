@@ -43,7 +43,7 @@ internal static class Launcher
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + "\"",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\"",
                 WorkingDirectory = exeDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,

@@ -50,7 +50,7 @@ $stamped = $workerContent -replace 'SpendWise \. by Hananel Sabag(\s*\.\s*build\
 if ($stamped -eq $workerContent) {
   Write-Output "NOTE: footer stamp pattern not found in SpendWise-Worker.ps1 - version won't show in-window (exe file properties still have it)."
 } else {
-  Set-Content -Path $workerPs1 -Value $stamped -Encoding UTF8
+  Set-Content -Path $workerPs1 -Value $stamped -Encoding UTF8 -NoNewline
   Write-Output "Stamped version into SpendWise-Worker.ps1 footer."
 }
 

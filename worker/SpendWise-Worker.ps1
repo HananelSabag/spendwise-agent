@@ -529,12 +529,12 @@ $modelTitle.AutoSize = $true
 $modelTitle.Location = New-Object System.Drawing.Point(16, 12)
 $modelCard.Controls.Add($modelTitle)
 
-New-Pill $modelCard $script:configSummary.KeyLabel 164 10 150 [System.Drawing.Color]::White $script:configSummary.KeyColor | Out-Null
+New-Pill $modelCard $script:configSummary.KeyLabel 164 10 150 ([System.Drawing.Color]::White) $script:configSummary.KeyColor | Out-Null
 New-InfoLine $modelCard 42 $cGreen 'Runs on this computer' 'The browser session opens here, not on SpendWise.'
 New-InfoLine $modelCard 86 $cCyan 'Encrypted handoff' 'The server queues work; the private key stays local.'
-New-Pill $modelCard $script:configSummary.ApiLabel 16 134 138 [System.Drawing.Color]::White $script:configSummary.ApiColor | Out-Null
-New-Pill $modelCard 'Banks + cards' 162 134 82 [System.Drawing.Color]::White $cIndigo | Out-Null
-New-Pill $modelCard '~2/day each' 252 134 72 [System.Drawing.Color]::White $cAmber | Out-Null
+New-Pill $modelCard $script:configSummary.ApiLabel 16 134 138 ([System.Drawing.Color]::White) $script:configSummary.ApiColor | Out-Null
+New-Pill $modelCard 'Banks + cards' 162 134 82 ([System.Drawing.Color]::White) $cIndigo | Out-Null
+New-Pill $modelCard '~2/day each' 252 134 72 ([System.Drawing.Color]::White) $cAmber | Out-Null
 
 # -- Buttons -----------------------------------------------------------------
 $btnMain = New-Object System.Windows.Forms.Button
@@ -592,7 +592,7 @@ $intervalLbl.Location = New-Object System.Drawing.Point(22, 654)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.7.1324'
+$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.7.2031'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
