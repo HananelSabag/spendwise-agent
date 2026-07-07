@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "code": "en",
+    "toggle": "עברית"
+  },
+  "app": {
+    "title": "SpendWise Worker",
+    "trayText": "SpendWise Worker"
+  },
+  "header": {
+    "subtitle": "Bank sync agent",
+    "pill": "LOCAL-FIRST"
+  },
+  "config": {
+    "apiNotSet": "API target not set",
+    "cloudApi": "SpendWise cloud API",
+    "localApi": "Local dev API",
+    "unsupportedApi": "Unsupported API URL",
+    "keyReady": "Private key ready",
+    "keyMissing": "Private key missing"
+  },
+  "status": {
+    "stopped": "Stopped",
+    "running": "Running",
+    "idle": "Idle",
+    "syncing": "Syncing...",
+    "nodeMissing": "Node.js not found",
+    "nextRun": "next check in {0}m",
+    "hint": "No bank login happens unless SpendWise queues a sync."
+  },
+  "result": {
+    "notRunYet": "Not run yet",
+    "lastSync": "Last sync: {0} new transactions, {1} already known",
+    "failure": "Last run had a failure - see agent.log",
+    "upToDate": "Up to date - no work was waiting",
+    "timeout": "Timed out after {0}m - cancelled ({1} process(es) stopped)",
+    "lastRun": "Last run {0}",
+    "started": "Started {0}",
+    "installNode": "Install Node.js, then try again",
+    "lastContact": "Last contact {0} · {1} checks this session"
+  },
+  "stats": {
+    "serverChecks": "Server checks",
+    "transactionsSynced": "Transactions synced"
+  },
+  "model": {
+    "title": "Local sync model",
+    "runsTitle": "Runs on this computer",
+    "runsBody": "The browser session opens here, not on SpendWise.",
+    "encryptedTitle": "Encrypted handoff",
+    "encryptedBody": "The server queues work; the private key stays local.",
+    "banksCards": "Banks + cards",
+    "frequency": "~2/day each"
+  },
+  "buttons": {
+    "start": "Start Worker",
+    "stop": "Stop Worker",
+    "runOnce": "Sync once now",
+    "clean": "Clean up stuck processes"
+  },
+  "startup": {
+    "label": "Launch automatically when Windows starts",
+    "interval": "Checks for queued work every {0} minutes. The watchdog cancels a stuck scrape after {1} minutes, so the window never sits on Syncing forever."
+  },
+  "cleanup": {
+    "none": "Nothing to clean up - all clear.",
+    "cleaned": "Cleaned up: {0}.",
+    "activeRun": "{0} process(es) from the active run",
+    "orphans": "{0} orphaned process(es)",
+    "staleLock": "stale lock file",
+    "title": "Clean up stuck processes"
+  },
+  "tray": {
+    "open": "Open",
+    "quit": "Quit",
+    "stillRunning": "Still running in the tray.",
+    "stuckTitle": "SpendWise Worker",
+    "stuckBody": "A sync got stuck and was cancelled after {0} minutes."
+  },
+  "footer": "SpendWise . by Hananel Sabag . build {0}"
+}

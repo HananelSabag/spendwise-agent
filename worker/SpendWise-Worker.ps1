@@ -46,6 +46,8 @@ $StateFile = Join-Path $AgentDir '.worker-state.json'
 $LockFile  = Join-Path $AgentDir '.agent.lock'
 $IconFile  = Join-Path $WorkerDir 'spendwise.ico'
 $LogoPng   = Join-Path $WorkerDir 'logo-source.png'   # 1024x1024 source logo
+$I18nDir   = Join-Path $WorkerDir 'i18n'
+$script:BuildVersion = '26.7.7.2049'
 $IntervalMinutes = 30
 $MaxRunMinutes   = 6   # a scrape+report never legitimately takes this long
 
@@ -97,12 +99,25 @@ $script:nextRunAt     = $null
 $script:currentProc   = $null
 $script:currentPid    = $null
 $script:runStartedAt  = $null
+$script:statusKey     = 'status.stopped'
 
 function Load-State {
   if (Test-Path $StateFile) {
-    try { return Get-Content $StateFile -Raw | ConvertFrom-Json } catch { }
+    try { return Get-Content $StateFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
   }
-  return [pscustomobject]@{ totalRuns = 0 }
+  return [pscustomobject]@{ totalRuns = 0; language = 'en' }
+}
+
+function Ensure-StateDefaults($s) {
+  if (-not $s) { $s = [pscustomobject]@{} }
+  if ($s.PSObject.Properties.Name -notcontains 'totalRuns') {
+    $s | Add-Member -NotePropertyName totalRuns -NotePropertyValue 0
+  }
+  if ($s.PSObject.Properties.Name -notcontains 'language') {
+    $s | Add-Member -NotePropertyName language -NotePropertyValue 'en'
+  }
+  if (@('en', 'he') -notcontains [string]$s.language) { $s.language = 'en' }
+  return $s
 }
 
 # Lifetime traffic totals, recomputed from the whole agent log (cheap, and
@@ -122,7 +137,39 @@ function Get-SyncTotals {
 function Save-State($s) {
   try { $s | ConvertTo-Json | Set-Content $StateFile -Encoding utf8 } catch { }
 }
-$script:state = Load-State
+$script:state = Ensure-StateDefaults (Load-State)
+
+function Load-I18n([string]$language) {
+  if (@('en', 'he') -notcontains $language) { $language = 'en' }
+  $path = Join-Path $I18nDir "$language.json"
+  if (-not (Test-Path $path)) {
+    $language = 'en'
+    $path = Join-Path $I18nDir 'en.json'
+  }
+  try {
+    $script:i18n = Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $script:language = $language
+  } catch {
+    $fallback = Join-Path $I18nDir 'en.json'
+    $script:i18n = Get-Content $fallback -Raw -Encoding UTF8 | ConvertFrom-Json
+    $script:language = 'en'
+  }
+}
+
+function T([string]$key) {
+  $node = $script:i18n
+  foreach ($part in $key.Split('.')) {
+    if ($null -eq $node -or $node.PSObject.Properties.Name -notcontains $part) { return $key }
+    $node = $node.$part
+  }
+  return [string]$node
+}
+
+function Tf([string]$key, [object[]]$values) {
+  return (T $key) -f $values
+}
+
+Load-I18n ([string]$script:state.language)
 
 function Get-AgentConfigSummary {
   $envFile = Join-Path $AgentDir '.env'
@@ -138,16 +185,16 @@ function Get-AgentConfigSummary {
     } catch { }
   }
 
-  $apiLabel = 'API target not set'
+  $apiLabel = T 'config.apiNotSet'
   $apiColor = $cAmber
   if ($apiUrl -match '^https://') {
-    $apiLabel = 'SpendWise cloud API'
+    $apiLabel = T 'config.cloudApi'
     $apiColor = $cCyan
   } elseif ($apiUrl -match '^http://(localhost|127\.0\.0\.1|\[::1\])') {
-    $apiLabel = 'Local dev API'
+    $apiLabel = T 'config.localApi'
     $apiColor = $cBlue
   } elseif ($apiUrl) {
-    $apiLabel = 'Unsupported API URL'
+    $apiLabel = T 'config.unsupportedApi'
     $apiColor = $cRed
   }
 
@@ -156,7 +203,7 @@ function Get-AgentConfigSummary {
   return [pscustomobject]@{
     ApiLabel = $apiLabel
     ApiColor = $apiColor
-    KeyLabel = $(if ($keyOk) { 'Private key ready' } else { 'Private key missing' })
+    KeyLabel = $(if ($keyOk) { T 'config.keyReady' } else { T 'config.keyMissing' })
     KeyColor = $(if ($keyOk) { $cGreen } else { $cAmber })
   }
 }
@@ -269,7 +316,7 @@ function Invoke-ZombieCleanup {
   # 1. Whatever THIS worker is currently tracking
   if ($script:currentPid) {
     $n = Stop-ProcessTree -ProcessId $script:currentPid
-    if ($n -gt 0) { $report += "$n process(es) from the active run" }
+    if ($n -gt 0) { $report += (Tf 'cleanup.activeRun' @($n)) }
     $script:currentPid = $null
     $script:currentProc = $null
     $script:busy = $false
@@ -281,21 +328,21 @@ function Invoke-ZombieCleanup {
   foreach ($p in $orphans) {
     try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $orphanCount++ } catch { }
   }
-  if ($orphanCount -gt 0) { $report += "$orphanCount orphaned process(es)" }
+  if ($orphanCount -gt 0) { $report += (Tf 'cleanup.orphans' @($orphanCount)) }
 
   # 3. Stale lock file - agent.js is PID-aware and self-heals this too, but
   #    clear it here for instant feedback instead of waiting for the next run.
   if (Test-Path $LockFile) {
-    try { Remove-Item $LockFile -Force; $report += 'stale lock file' } catch { }
+    try { Remove-Item $LockFile -Force; $report += (T 'cleanup.staleLock') } catch { }
   }
 
-  if ($report.Count -eq 0) { return 'Nothing to clean up - all clear.' }
-  return "Cleaned up: $($report -join ', ')."
+  if ($report.Count -eq 0) { return T 'cleanup.none' }
+  return Tf 'cleanup.cleaned' @($report -join ', ')
 }
 
 # -- Form --------------------------------------------------------------------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'SpendWise Worker'
+$form.Text = T 'app.title'
 $form.ClientSize = New-Object System.Drawing.Size(380, 730)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
@@ -333,7 +380,7 @@ if ($logoImg) { $logoBox.Image = $logoImg } else { try { $logoBox.Image = Get-Lo
 $header.Controls.Add($logoBox)
 
 $hdrTitle = New-Object System.Windows.Forms.Label
-$hdrTitle.Text = 'SpendWise Worker'
+$hdrTitle.Text = T 'app.title'
 $hdrTitle.Font = $fTitle
 $hdrTitle.ForeColor = [System.Drawing.Color]::White
 $hdrTitle.BackColor = [System.Drawing.Color]::Transparent
@@ -342,7 +389,7 @@ $hdrTitle.Location = New-Object System.Drawing.Point(78, 17)
 $header.Controls.Add($hdrTitle)
 
 $hdrSub = New-Object System.Windows.Forms.Label
-$hdrSub.Text = 'Bank sync agent'
+$hdrSub.Text = T 'header.subtitle'
 $hdrSub.Font = $fSmall
 $hdrSub.ForeColor = [System.Drawing.Color]::FromArgb(199, 210, 254)  # indigo-200
 $hdrSub.BackColor = [System.Drawing.Color]::Transparent
@@ -351,15 +398,28 @@ $hdrSub.Location = New-Object System.Drawing.Point(80, 45)
 $header.Controls.Add($hdrSub)
 
 $hdrPill = New-Object System.Windows.Forms.Label
-$hdrPill.Text = 'LOCAL-FIRST'
+$hdrPill.Text = T 'header.pill'
 $hdrPill.Font = $fPill
 $hdrPill.ForeColor = [System.Drawing.Color]::White
 $hdrPill.BackColor = [System.Drawing.Color]::FromArgb(34, 197, 94)
 $hdrPill.AutoSize = $false
 $hdrPill.TextAlign = 'MiddleCenter'
-$hdrPill.Size = New-Object System.Drawing.Size(82, 22)
-$hdrPill.Location = New-Object System.Drawing.Point(270, 26)
+$hdrPill.Size = New-Object System.Drawing.Size(88, 22)
+$hdrPill.Location = New-Object System.Drawing.Point(252, 43)
 $header.Controls.Add($hdrPill)
+
+$btnLang = New-Object System.Windows.Forms.Button
+$btnLang.Text = T 'meta.toggle'
+$btnLang.Font = $fPill
+$btnLang.ForeColor = [System.Drawing.Color]::White
+$btnLang.BackColor = [System.Drawing.Color]::FromArgb(30, 41, 59)
+$btnLang.FlatStyle = 'Flat'
+$btnLang.FlatAppearance.BorderSize = 1
+$btnLang.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(129, 140, 248)
+$btnLang.Size = New-Object System.Drawing.Size(64, 24)
+$btnLang.Location = New-Object System.Drawing.Point(292, 13)
+$btnLang.Cursor = 'Hand'
+$header.Controls.Add($btnLang)
 
 # -- Status card -------------------------------------------------------------
 $statusCard = New-Object System.Windows.Forms.Panel
@@ -382,7 +442,7 @@ $dot.Location = New-Object System.Drawing.Point(14, 12)
 $statusCard.Controls.Add($dot)
 
 $statusText = New-Object System.Windows.Forms.Label
-$statusText.Text = 'Stopped'
+$statusText.Text = T 'status.stopped'
 $statusText.Font = $fBold
 $statusText.ForeColor = $cText
 $statusText.AutoSize = $true
@@ -399,7 +459,7 @@ $nextRunLbl.Location = New-Object System.Drawing.Point(210, 20)
 $statusCard.Controls.Add($nextRunLbl)
 
 $lastResult = New-Object System.Windows.Forms.Label
-$lastResult.Text = 'Not run yet'
+$lastResult.Text = T 'result.notRunYet'
 $lastResult.Font = $fRegular
 $lastResult.ForeColor = $cMuted
 $lastResult.AutoSize = $false
@@ -416,7 +476,7 @@ $lastRun.Location = New-Object System.Drawing.Point(44, 76)
 $statusCard.Controls.Add($lastRun)
 
 $statusHint = New-Object System.Windows.Forms.Label
-$statusHint.Text = 'No bank login happens unless SpendWise queues a sync.'
+$statusHint.Text = T 'status.hint'
 $statusHint.Font = $fSmall
 $statusHint.ForeColor = $cGray
 $statusHint.AutoSize = $false
@@ -458,11 +518,11 @@ function New-StatCard($x, $labelText, $numColor, $accent) {
   $lbl.Location = New-Object System.Drawing.Point(14, 44)
   $panel.Controls.Add($lbl)
 
-  return @{ Panel = $panel; Num = $num }
+  return @{ Panel = $panel; Num = $num; Label = $lbl }
 }
 
-$statA = New-StatCard 20  'Server checks'       $cIndigo $cIndigo
-$statB = New-StatCard 196 'Transactions synced' $cGreen  $cGreen
+$statA = New-StatCard 20  (T 'stats.serverChecks')       $cIndigo $cIndigo
+$statB = New-StatCard 196 (T 'stats.transactionsSynced') $cGreen  $cGreen
 $statA.Num.Text = "$($script:state.totalRuns)"
 $statB.Num.Text = "$((Get-SyncTotals).newTxns)"
 $form.Controls.Add($statA.Panel)
@@ -494,6 +554,7 @@ function New-InfoLine($parent, $y, $accent, $titleText, $bodyText) {
   $body.Size = New-Object System.Drawing.Size(278, 18)
   $body.Location = New-Object System.Drawing.Point(38, ($y + 22))
   $parent.Controls.Add($body)
+  return @{ Title = $title; Body = $body; Mark = $mark }
 }
 
 function New-Pill($parent, $text, $x, $y, $w, $fore, $back) {
@@ -522,23 +583,23 @@ $modelCard.Add_Paint({
 $form.Controls.Add($modelCard)
 
 $modelTitle = New-Object System.Windows.Forms.Label
-$modelTitle.Text = 'Local sync model'
+$modelTitle.Text = T 'model.title'
 $modelTitle.Font = $fBold
 $modelTitle.ForeColor = $cText
 $modelTitle.AutoSize = $true
 $modelTitle.Location = New-Object System.Drawing.Point(16, 12)
 $modelCard.Controls.Add($modelTitle)
 
-New-Pill $modelCard $script:configSummary.KeyLabel 164 10 150 ([System.Drawing.Color]::White) $script:configSummary.KeyColor | Out-Null
-New-InfoLine $modelCard 42 $cGreen 'Runs on this computer' 'The browser session opens here, not on SpendWise.'
-New-InfoLine $modelCard 86 $cCyan 'Encrypted handoff' 'The server queues work; the private key stays local.'
-New-Pill $modelCard $script:configSummary.ApiLabel 16 134 138 ([System.Drawing.Color]::White) $script:configSummary.ApiColor | Out-Null
-New-Pill $modelCard 'Banks + cards' 162 134 82 ([System.Drawing.Color]::White) $cIndigo | Out-Null
-New-Pill $modelCard '~2/day each' 252 134 72 ([System.Drawing.Color]::White) $cAmber | Out-Null
+$pillKey = New-Pill $modelCard $script:configSummary.KeyLabel 164 10 150 ([System.Drawing.Color]::White) $script:configSummary.KeyColor
+$infoRun = New-InfoLine $modelCard 42 $cGreen (T 'model.runsTitle') (T 'model.runsBody')
+$infoEncrypted = New-InfoLine $modelCard 86 $cCyan (T 'model.encryptedTitle') (T 'model.encryptedBody')
+$pillApi = New-Pill $modelCard $script:configSummary.ApiLabel 16 134 138 ([System.Drawing.Color]::White) $script:configSummary.ApiColor
+$pillBanks = New-Pill $modelCard (T 'model.banksCards') 162 134 82 ([System.Drawing.Color]::White) $cIndigo
+$pillFreq = New-Pill $modelCard (T 'model.frequency') 252 134 72 ([System.Drawing.Color]::White) $cAmber
 
 # -- Buttons -----------------------------------------------------------------
 $btnMain = New-Object System.Windows.Forms.Button
-$btnMain.Text = 'Start Worker'
+$btnMain.Text = T 'buttons.start'
 $btnMain.Font = $fBold
 $btnMain.ForeColor = [System.Drawing.Color]::White
 $btnMain.BackColor = $cIndigo
@@ -550,7 +611,7 @@ $btnMain.Cursor = 'Hand'
 $form.Controls.Add($btnMain)
 
 $btnRun = New-Object System.Windows.Forms.Button
-$btnRun.Text = 'Sync once now'
+$btnRun.Text = T 'buttons.runOnce'
 $btnRun.Font = $fRegular
 $btnRun.ForeColor = $cText
 $btnRun.BackColor = $cCard2
@@ -562,7 +623,7 @@ $btnRun.Cursor = 'Hand'
 $form.Controls.Add($btnRun)
 
 $btnClean = New-Object System.Windows.Forms.Button
-$btnClean.Text = 'Clean up stuck processes'
+$btnClean.Text = T 'buttons.clean'
 $btnClean.Font = $fSmall
 $btnClean.ForeColor = $cAmber
 $btnClean.BackColor = $cBg
@@ -576,7 +637,7 @@ $form.Controls.Add($btnClean)
 
 # -- Startup toggle + info ---------------------------------------------------
 $chkStartup = New-Object System.Windows.Forms.CheckBox
-$chkStartup.Text = ' Launch automatically when Windows starts'
+$chkStartup.Text = ' ' + (T 'startup.label')
 $chkStartup.Font = $fRegular
 $chkStartup.ForeColor = $cMuted
 $chkStartup.AutoSize = $true
@@ -584,7 +645,7 @@ $chkStartup.Location = New-Object System.Drawing.Point(22, 624)
 $form.Controls.Add($chkStartup)
 
 $intervalLbl = New-Object System.Windows.Forms.Label
-$intervalLbl.Text = "Checks for queued work every $IntervalMinutes minutes. The watchdog cancels a stuck scrape after $MaxRunMinutes minutes, so the window never sits on Syncing forever."
+$intervalLbl.Text = Tf 'startup.interval' @($IntervalMinutes, $MaxRunMinutes)
 $intervalLbl.Font = $fSmall
 $intervalLbl.ForeColor = $cMuted
 $intervalLbl.Size = New-Object System.Drawing.Size(340, 48)
@@ -592,7 +653,7 @@ $intervalLbl.Location = New-Object System.Drawing.Point(22, 654)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.7.2031'
+$footer.Text = Tf 'footer' @($script:BuildVersion)
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
@@ -602,37 +663,49 @@ $form.Controls.Add($footer)
 # -- Tray icon ---------------------------------------------------------------
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Icon = $appIcon
-$tray.Text = 'SpendWise Worker'
+$tray.Text = T 'app.trayText'
 $tray.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
-$miOpen = $menu.Items.Add('Open')
-$miRun  = $menu.Items.Add('Sync once now')
-$miClean = $menu.Items.Add('Clean up stuck processes')
+$miOpen = $menu.Items.Add((T 'tray.open'))
+$miRun  = $menu.Items.Add((T 'buttons.runOnce'))
+$miClean = $menu.Items.Add((T 'buttons.clean'))
 $menu.Items.Add('-') | Out-Null
-$miQuit = $menu.Items.Add('Quit')
+$miQuit = $menu.Items.Add((T 'tray.quit'))
 $tray.ContextMenuStrip = $menu
 
 # -- Helpers -----------------------------------------------------------------
-function Set-Status($text, $color) {
-  $statusText.Text = $text
+function Set-Status($key, $color) {
+  $script:statusKey = $key
+  $statusText.Text = T $key
   $dot.ForeColor = $color
 }
 
 function Parse-LastResult {
-  if (-not (Test-Path $LogFile)) { return }
-  try { $tail = Get-Content $LogFile -Tail 40 -ErrorAction Stop } catch { return }
+  if (-not (Test-Path $LogFile)) {
+    $lastResult.Text = T 'result.notRunYet'
+    $lastResult.ForeColor = $cMuted
+    return
+  }
+  try { $tail = Get-Content $LogFile -Tail 40 -ErrorAction Stop } catch {
+    $lastResult.Text = T 'result.notRunYet'
+    $lastResult.ForeColor = $cMuted
+    return
+  }
   $done = $tail | Where-Object { $_ -match 'DONE .* (\d+) new, (\d+) skipped' } | Select-Object -Last 1
   $none = $tail | Where-Object { $_ -match 'no pending jobs' } | Select-Object -Last 1
   $fail = $tail | Where-Object { $_ -match 'FAILED|FATAL' } | Select-Object -Last 1
   if ($done -and ($done -match '(\d+) new, (\d+) skipped')) {
-    $lastResult.Text = "Last sync: $($Matches[1]) new transactions, $($Matches[2]) already known"
+    $lastResult.Text = Tf 'result.lastSync' @($Matches[1], $Matches[2])
     $lastResult.ForeColor = $cGreen
   } elseif ($fail) {
-    $lastResult.Text = 'Last run had a failure - see agent.log'
+    $lastResult.Text = T 'result.failure'
     $lastResult.ForeColor = $cRed
   } elseif ($none) {
-    $lastResult.Text = 'Up to date - no work was waiting'
+    $lastResult.Text = T 'result.upToDate'
+    $lastResult.ForeColor = $cMuted
+  } else {
+    $lastResult.Text = T 'result.notRunYet'
     $lastResult.ForeColor = $cMuted
   }
 }
@@ -640,7 +713,7 @@ function Parse-LastResult {
 function Update-NextRun {
   if ($script:running -and $script:nextRunAt) {
     $mins = [math]::Max(0, [math]::Round(($script:nextRunAt - (Get-Date)).TotalMinutes))
-    $nextRunLbl.Text = "next check in ${mins}m"
+    $nextRunLbl.Text = Tf 'status.nextRun' @($mins)
   } else {
     $nextRunLbl.Text = ''
   }
@@ -657,11 +730,11 @@ $watchdogTimer.Add_Tick({
     $script:busy = $false
     $script:currentProc = $null
     $script:currentPid = $null
-    $lastResult.Text = "Timed out after ${MaxRunMinutes}m - cancelled ($killed process(es) stopped)"
+    $lastResult.Text = Tf 'result.timeout' @($MaxRunMinutes, $killed)
     $lastResult.ForeColor = $cRed
-    $lastRun.Text = "Last run $(Get-Date -Format 'dd/MM HH:mm')"
-    if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
-    $tray.ShowBalloonTip(4000, 'SpendWise Worker', "A sync got stuck and was cancelled after ${MaxRunMinutes} minutes.", 'Warning')
+    $lastRun.Text = Tf 'result.lastRun' @((Get-Date -Format 'dd/MM HH:mm'))
+    if ($script:running) { Set-Status 'status.running' $cGreen } else { Set-Status 'status.idle' $cGray }
+    $tray.ShowBalloonTip(4000, (T 'tray.stuckTitle'), (Tf 'tray.stuckBody' @($MaxRunMinutes)), 'Warning')
   }
 })
 $watchdogTimer.Start()
@@ -692,8 +765,8 @@ function Invoke-AgentRun {
   if ($script:busy) { return }
   $script:busy = $true
   $script:runStartedAt = Get-Date
-  Set-Status 'Syncing...' $cBlue
-  $lastRun.Text = "Started $(Get-Date -Format 'HH:mm:ss')"
+  Set-Status 'status.syncing' $cBlue
+  $lastRun.Text = Tf 'result.started' @((Get-Date -Format 'HH:mm:ss'))
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = 'node'
@@ -704,8 +777,8 @@ function Invoke-AgentRun {
   try {
     $proc = [System.Diagnostics.Process]::Start($psi)
   } catch {
-    Set-Status 'Node.js not found' $cRed
-    $lastResult.Text = 'Install Node.js, then try again'
+    Set-Status 'status.nodeMissing' $cRed
+    $lastResult.Text = T 'result.installNode'
     $lastResult.ForeColor = $cRed
     $script:busy = $false
     $script:runStartedAt = $null
@@ -741,8 +814,8 @@ function Invoke-AgentRun {
       $script:runStartedAt = $null
       Parse-LastResult
       $statB.Num.Text = "$((Get-SyncTotals).newTxns)"
-      $lastRun.Text = "Last contact $(Get-Date -Format 'HH:mm') · $($script:sessionRuns) checks this session"
-      if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
+      $lastRun.Text = Tf 'result.lastContact' @((Get-Date -Format 'HH:mm'), $script:sessionRuns)
+      if ($script:running) { Set-Status 'status.running' $cGreen } else { Set-Status 'status.idle' $cGray }
     }
   })
   $waitTimer.Start()
@@ -763,9 +836,9 @@ $countdownTimer.Start()
 
 function Start-Worker {
   $script:running = $true
-  $btnMain.Text = 'Stop Worker'
+  $btnMain.Text = T 'buttons.stop'
   $btnMain.BackColor = $cCard2
-  Set-Status 'Running' $cGreen
+  Set-Status 'status.running' $cGreen
   $script:nextRunAt = (Get-Date).AddMinutes($IntervalMinutes)
   Update-NextRun
   $loopTimer.Start()
@@ -776,9 +849,9 @@ function Stop-Worker {
   $loopTimer.Stop()
   $script:nextRunAt = $null
   Update-NextRun
-  $btnMain.Text = 'Start Worker'
+  $btnMain.Text = T 'buttons.start'
   $btnMain.BackColor = $cIndigo
-  Set-Status 'Stopped' $cGray
+  Set-Status 'status.stopped' $cGray
 }
 
 # -- Windows startup registration --------------------------------------------
@@ -801,7 +874,71 @@ function Set-Startup($on) {
 }
 $chkStartup.Checked = Test-Startup
 
+function Apply-Language {
+  $isHebrew = ($script:language -eq 'he')
+  $rtl = if ($isHebrew) { [System.Windows.Forms.RightToLeft]::Yes } else { [System.Windows.Forms.RightToLeft]::No }
+
+  foreach ($ctrl in @(
+      $hdrSub, $hdrPill, $btnLang, $statusText, $nextRunLbl, $lastResult, $lastRun,
+      $statusHint, $statA.Label, $statB.Label, $modelTitle, $infoRun.Title,
+      $infoRun.Body, $infoEncrypted.Title, $infoEncrypted.Body, $pillKey, $pillApi,
+      $pillBanks, $pillFreq, $btnMain, $btnRun, $btnClean, $chkStartup,
+      $intervalLbl, $footer
+    )) {
+    if ($ctrl) { $ctrl.RightToLeft = $rtl }
+  }
+
+  $form.Text = T 'app.title'
+  $tray.Text = T 'app.trayText'
+  $hdrTitle.Text = T 'app.title'
+  $hdrSub.Text = T 'header.subtitle'
+  $hdrPill.Text = T 'header.pill'
+  $btnLang.Text = T 'meta.toggle'
+
+  $statA.Label.Text = T 'stats.serverChecks'
+  $statB.Label.Text = T 'stats.transactionsSynced'
+
+  $modelTitle.Text = T 'model.title'
+  $infoRun.Title.Text = T 'model.runsTitle'
+  $infoRun.Body.Text = T 'model.runsBody'
+  $infoEncrypted.Title.Text = T 'model.encryptedTitle'
+  $infoEncrypted.Body.Text = T 'model.encryptedBody'
+
+  $script:configSummary = Get-AgentConfigSummary
+  $pillKey.Text = $script:configSummary.KeyLabel
+  $pillKey.BackColor = $script:configSummary.KeyColor
+  $pillApi.Text = $script:configSummary.ApiLabel
+  $pillApi.BackColor = $script:configSummary.ApiColor
+  $pillBanks.Text = T 'model.banksCards'
+  $pillFreq.Text = T 'model.frequency'
+
+  $btnMain.Text = if ($script:running) { T 'buttons.stop' } else { T 'buttons.start' }
+  $btnRun.Text = T 'buttons.runOnce'
+  $btnClean.Text = T 'buttons.clean'
+  $chkStartup.Text = ' ' + (T 'startup.label')
+  $intervalLbl.Text = Tf 'startup.interval' @($IntervalMinutes, $MaxRunMinutes)
+  $footer.Text = Tf 'footer' @($script:BuildVersion)
+  $statusHint.Text = T 'status.hint'
+
+  $miOpen.Text = T 'tray.open'
+  $miRun.Text = T 'buttons.runOnce'
+  $miClean.Text = T 'buttons.clean'
+  $miQuit.Text = T 'tray.quit'
+
+  if ($script:statusKey) { $statusText.Text = T $script:statusKey }
+  Update-NextRun
+  Parse-LastResult
+}
+
+function Toggle-Language {
+  $script:state.language = if ($script:language -eq 'he') { 'en' } else { 'he' }
+  Save-State $script:state
+  Load-I18n ([string]$script:state.language)
+  Apply-Language
+}
+
 # -- Wiring ------------------------------------------------------------------
+$btnLang.Add_Click({ Toggle-Language })
 $btnMain.Add_Click({ if ($script:running) { Stop-Worker } else { Start-Worker } })
 $btnRun.Add_Click({ Invoke-AgentRun })
 $btnClean.Add_Click({
@@ -809,9 +946,9 @@ $btnClean.Add_Click({
   $msg = Invoke-ZombieCleanup
   $lastResult.Text = $msg
   $lastResult.ForeColor = $cAmber
-  if ($script:running) { Set-Status 'Running' $cGreen } else { Set-Status 'Idle' $cGray }
+  if ($script:running) { Set-Status 'status.running' $cGreen } else { Set-Status 'status.idle' $cGray }
   $btnClean.Enabled = $true
-  [System.Windows.Forms.MessageBox]::Show($msg, 'Clean up stuck processes', 'OK', 'Information') | Out-Null
+  [System.Windows.Forms.MessageBox]::Show($msg, (T 'cleanup.title'), 'OK', 'Information') | Out-Null
 })
 $chkStartup.Add_Click({ Set-Startup $chkStartup.Checked })
 
@@ -827,14 +964,14 @@ $form.Add_FormClosing({
   if ($script:userQuit -ne $true) {
     $e.Cancel = $true
     $form.Hide()
-    $tray.ShowBalloonTip(2000, 'SpendWise Worker', 'Still running in the tray.', 'Info')
+    $tray.ShowBalloonTip(2000, (T 'app.title'), (T 'tray.stillRunning'), 'Info')
   } else {
     # Real quit: don't leave a sync running headless with no UI to watch it.
     if ($script:currentPid) { Stop-ProcessTree -ProcessId $script:currentPid | Out-Null }
   }
 })
 
-Parse-LastResult
+Apply-Language
 
 # Auto-start the worker loop when launched at Windows startup (silent path),
 # so a reboot resumes syncing without any click.

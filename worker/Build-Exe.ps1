@@ -39,19 +39,16 @@ $src = $src -replace 'public const string BuildVersion = "[^"]*";', "public cons
 $tmpSrc = Join-Path $BuildDir 'Launcher.generated.cs'
 Set-Content -Path $tmpSrc -Value $src -Encoding UTF8
 
-# Also stamp the version into the worker script's footer label so it's
-# visible in the running window itself, not just in exe file properties.
-# Matches both the neutral text (first build) and an already-stamped footer
-# from a previous build (every build after that) so this keeps re-stamping
-# instead of silently doing nothing from the second build onward.
+# Also stamp the version into the worker script so it's visible in the
+# localized footer, not just in exe file properties.
 $workerPs1 = Join-Path $WorkerDir 'SpendWise-Worker.ps1'
 $workerContent = Get-Content $workerPs1 -Raw
-$stamped = $workerContent -replace 'SpendWise \. by Hananel Sabag(\s*\.\s*build\s*[0-9.]+)?', "SpendWise . by Hananel Sabag . build $version"
+$stamped = $workerContent -replace '\$script:BuildVersion\s*=\s*''[^'']*''', "`$script:BuildVersion = '$version'"
 if ($stamped -eq $workerContent) {
-  Write-Output "NOTE: footer stamp pattern not found in SpendWise-Worker.ps1 - version won't show in-window (exe file properties still have it)."
+  Write-Output "NOTE: BuildVersion pattern not found in SpendWise-Worker.ps1 - version won't show in-window (exe file properties still have it)."
 } else {
   Set-Content -Path $workerPs1 -Value $stamped -Encoding UTF8 -NoNewline
-  Write-Output "Stamped version into SpendWise-Worker.ps1 footer."
+  Write-Output "Stamped version into SpendWise-Worker.ps1 BuildVersion."
 }
 
 # ── Compile ──────────────────────────────────────────────────────────────
