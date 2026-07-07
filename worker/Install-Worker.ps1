@@ -1,8 +1,8 @@
 # ============================================================================
 #  Install-Worker.ps1 - one-time setup for the SpendWise Worker
 #  Creates a "SpendWise Worker" shortcut on your Desktop and Start Menu that
-#  points at SpendWiseWorker.exe (the real logo, no console flash). Builds
-#  the exe first if it doesn't exist yet. Run once:
+#  points at the self-contained C# SpendWiseWorker.exe (real logo, no console
+#  flash). Builds the exe first if it doesn't exist yet. Run once:
 #     powershell -ExecutionPolicy Bypass -File worker\Install-Worker.ps1
 # ============================================================================
 

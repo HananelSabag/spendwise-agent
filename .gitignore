@@ -13,6 +13,8 @@ agent-private.key
 # C# compiler built into every Windows install, no external tools needed)
 worker/*.exe
 worker/build/*.generated.cs
+worker/desktop/bin/
+worker/desktop/obj/
 
 # Packaged runnable copy of the worker (exe + logo + shortcuts) — a local,
 # organized "app" bundle built from worker/; regenerable, not source.

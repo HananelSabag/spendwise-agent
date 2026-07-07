@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SpendWiseWorker</AssemblyName>
+    <RootNamespace>SpendWiseWorker</RootNamespace>
+    <ApplicationIcon>..\spendwise.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\spendwise.ico" Link="spendwise.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\logo-source.png" Link="logo-source.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\i18n\*.json" Link="i18n\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
