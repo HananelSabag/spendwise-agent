@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mapAccounts } from '../src/core/scraper.js';
-import { assertCredentialShape } from '../src/core/banks.js';
+import { BANKS, assertCredentialShape } from '../src/core/banks.js';
 
 test('mapAccounts maps a valid account', () => {
   const raw = [{
@@ -53,4 +53,22 @@ test('assertCredentialShape enforces per-bank required fields', () => {
     assertCredentialShape('yahav', { username: 'u' }), /missing fields: password, nationalID/);
   assert.doesNotThrow(() =>
     assertCredentialShape('max', { username: 'u', password: 'p' }));
+});
+
+test('BANKS registry exposes supported SpendWise source ids with scraper company ids', () => {
+  assert.equal(BANKS.visa_cal.companyId, 'visaCal');
+  assert.equal(BANKS.otsar_hahayal.companyId, 'otsarHahayal');
+  assert.deepEqual(BANKS.hapoalim.credFields, ['userCode', 'password']);
+  assert.deepEqual(BANKS.amex.credFields, ['id', 'card6Digits', 'password']);
+});
+
+test('assertCredentialShape covers newly exposed banks and credit companies', () => {
+  assert.doesNotThrow(() =>
+    assertCredentialShape('hapoalim', { userCode: 'u', password: 'p' }));
+  assert.doesNotThrow(() =>
+    assertCredentialShape('visa_cal', { username: 'u', password: 'p' }));
+  assert.doesNotThrow(() =>
+    assertCredentialShape('mercantile', { id: '1', password: 'p', num: '7' }));
+  assert.throws(() =>
+    assertCredentialShape('amex', { id: '1', password: 'p' }), /missing fields: card6Digits/);
 });

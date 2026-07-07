@@ -62,6 +62,9 @@ $cGray    = [System.Drawing.Color]::FromArgb(100, 116, 139)
 $cRed     = [System.Drawing.Color]::FromArgb(239, 68, 68)
 $cBlue    = [System.Drawing.Color]::FromArgb(59, 130, 246)
 $cAmber   = [System.Drawing.Color]::FromArgb(245, 158, 11)
+$cCyan    = [System.Drawing.Color]::FromArgb(6, 182, 212)
+$cPanel   = [System.Drawing.Color]::FromArgb(24, 32, 49)
+$cBorder  = [System.Drawing.Color]::FromArgb(71, 85, 105)
 
 # Fonts — Windows 11 "Segoe UI Variable" is softer and rounder than the plain
 # "Segoe UI" that made the panel feel blocky. Fall back gracefully on older
@@ -120,6 +123,45 @@ function Save-State($s) {
   try { $s | ConvertTo-Json | Set-Content $StateFile -Encoding utf8 } catch { }
 }
 $script:state = Load-State
+
+function Get-AgentConfigSummary {
+  $envFile = Join-Path $AgentDir '.env'
+  $apiUrl = ''
+  if (Test-Path $envFile) {
+    try {
+      $line = Get-Content $envFile -ErrorAction Stop |
+        Where-Object { $_ -match '^\s*API_URL\s*=' } |
+        Select-Object -First 1
+      if ($line -match '^\s*API_URL\s*=\s*(.+?)\s*$') {
+        $apiUrl = $Matches[1].Trim().Trim('"').Trim("'")
+      }
+    } catch { }
+  }
+
+  $apiLabel = 'API target not set'
+  $apiColor = $cAmber
+  if ($apiUrl -match '^https://') {
+    $apiLabel = 'SpendWise cloud API'
+    $apiColor = $cCyan
+  } elseif ($apiUrl -match '^http://(localhost|127\.0\.0\.1|\[::1\])') {
+    $apiLabel = 'Local dev API'
+    $apiColor = $cBlue
+  } elseif ($apiUrl) {
+    $apiLabel = 'Unsupported API URL'
+    $apiColor = $cRed
+  }
+
+  $privateKey = Join-Path $AgentDir 'agent-private.key'
+  $keyOk = Test-Path $privateKey
+  return [pscustomobject]@{
+    ApiLabel = $apiLabel
+    ApiColor = $apiColor
+    KeyLabel = $(if ($keyOk) { 'Private key ready' } else { 'Private key missing' })
+    KeyColor = $(if ($keyOk) { $cGreen } else { $cAmber })
+  }
+}
+
+$script:configSummary = Get-AgentConfigSummary
 
 # -- Logo / icon helpers ------------------------------------------------------
 # High-quality downscale of the 1024px source PNG to a square bitmap. Rendering
@@ -254,7 +296,7 @@ function Invoke-ZombieCleanup {
 # -- Form --------------------------------------------------------------------
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'SpendWise Worker'
-$form.ClientSize = New-Object System.Drawing.Size(380, 566)
+$form.ClientSize = New-Object System.Drawing.Size(380, 730)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -308,11 +350,27 @@ $hdrSub.AutoSize = $true
 $hdrSub.Location = New-Object System.Drawing.Point(80, 45)
 $header.Controls.Add($hdrSub)
 
+$hdrPill = New-Object System.Windows.Forms.Label
+$hdrPill.Text = 'LOCAL-FIRST'
+$hdrPill.Font = $fPill
+$hdrPill.ForeColor = [System.Drawing.Color]::White
+$hdrPill.BackColor = [System.Drawing.Color]::FromArgb(34, 197, 94)
+$hdrPill.AutoSize = $false
+$hdrPill.TextAlign = 'MiddleCenter'
+$hdrPill.Size = New-Object System.Drawing.Size(82, 22)
+$hdrPill.Location = New-Object System.Drawing.Point(270, 26)
+$header.Controls.Add($hdrPill)
+
 # -- Status card -------------------------------------------------------------
 $statusCard = New-Object System.Windows.Forms.Panel
-$statusCard.Location = New-Object System.Drawing.Point(20, 80)
-$statusCard.Size = New-Object System.Drawing.Size(340, 108)
+$statusCard.Location = New-Object System.Drawing.Point(20, 88)
+$statusCard.Size = New-Object System.Drawing.Size(340, 118)
 $statusCard.BackColor = $cCard
+$statusCard.Add_Paint({
+  $pen = New-Object System.Drawing.Pen($cBorder, 1)
+  $_.Graphics.DrawRectangle($pen, 0, 0, ($statusCard.Width - 1), ($statusCard.Height - 1))
+  $pen.Dispose()
+})
 $form.Controls.Add($statusCard)
 
 $dot = New-Object System.Windows.Forms.Label
@@ -357,19 +415,31 @@ $lastRun.AutoSize = $true
 $lastRun.Location = New-Object System.Drawing.Point(44, 76)
 $statusCard.Controls.Add($lastRun)
 
+$statusHint = New-Object System.Windows.Forms.Label
+$statusHint.Text = 'No bank login happens unless SpendWise queues a sync.'
+$statusHint.Font = $fSmall
+$statusHint.ForeColor = $cGray
+$statusHint.AutoSize = $false
+$statusHint.Size = New-Object System.Drawing.Size(292, 18)
+$statusHint.Location = New-Object System.Drawing.Point(44, 96)
+$statusCard.Controls.Add($statusHint)
+
 # -- Stats row (traffic at a glance) -----------------------------------------
 # A colored accent bar down the left edge of each card gives the numbers some
 # life and ties them to their meaning (indigo = talking to the server,
 # green = money data actually pulled in).
 function New-StatCard($x, $labelText, $numColor, $accent) {
   $panel = New-Object System.Windows.Forms.Panel
-  $panel.Location = New-Object System.Drawing.Point($x, 200)
+  $panel.Location = New-Object System.Drawing.Point($x, 218)
   $panel.Size = New-Object System.Drawing.Size(164, 68)
   $panel.BackColor = $cCard
   $panel.Add_Paint({
     $b = New-Object System.Drawing.SolidBrush $accent
     $_.Graphics.FillRectangle($b, (New-Object System.Drawing.Rectangle 0, 0, 3, 68))
     $b.Dispose()
+    $pen = New-Object System.Drawing.Pen($cBorder, 1)
+    $_.Graphics.DrawRectangle($pen, 0, 0, ($panel.Width - 1), ($panel.Height - 1))
+    $pen.Dispose()
   }.GetNewClosure())
 
   $num = New-Object System.Windows.Forms.Label
@@ -398,6 +468,74 @@ $statB.Num.Text = "$((Get-SyncTotals).newTxns)"
 $form.Controls.Add($statA.Panel)
 $form.Controls.Add($statB.Panel)
 
+# -- Local privacy model ------------------------------------------------------
+function New-InfoLine($parent, $y, $accent, $titleText, $bodyText) {
+  $mark = New-Object System.Windows.Forms.Label
+  $mark.Text = [char]0x25CF
+  $mark.Font = New-Object System.Drawing.Font('Segoe UI', 8.5)
+  $mark.ForeColor = $accent
+  $mark.AutoSize = $true
+  $mark.Location = New-Object System.Drawing.Point(17, ($y + 3))
+  $parent.Controls.Add($mark)
+
+  $title = New-Object System.Windows.Forms.Label
+  $title.Text = $titleText
+  $title.Font = $fBold
+  $title.ForeColor = $cText
+  $title.AutoSize = $true
+  $title.Location = New-Object System.Drawing.Point(38, $y)
+  $parent.Controls.Add($title)
+
+  $body = New-Object System.Windows.Forms.Label
+  $body.Text = $bodyText
+  $body.Font = $fSmall
+  $body.ForeColor = $cMuted
+  $body.AutoSize = $false
+  $body.Size = New-Object System.Drawing.Size(278, 18)
+  $body.Location = New-Object System.Drawing.Point(38, ($y + 22))
+  $parent.Controls.Add($body)
+}
+
+function New-Pill($parent, $text, $x, $y, $w, $fore, $back) {
+  $pill = New-Object System.Windows.Forms.Label
+  $pill.Text = $text
+  $pill.Font = $fPill
+  $pill.ForeColor = $fore
+  $pill.BackColor = $back
+  $pill.AutoSize = $false
+  $pill.TextAlign = 'MiddleCenter'
+  $pill.Size = New-Object System.Drawing.Size($w, 22)
+  $pill.Location = New-Object System.Drawing.Point($x, $y)
+  $parent.Controls.Add($pill)
+  return $pill
+}
+
+$modelCard = New-Object System.Windows.Forms.Panel
+$modelCard.Location = New-Object System.Drawing.Point(20, 302)
+$modelCard.Size = New-Object System.Drawing.Size(340, 164)
+$modelCard.BackColor = $cPanel
+$modelCard.Add_Paint({
+  $pen = New-Object System.Drawing.Pen($cBorder, 1)
+  $_.Graphics.DrawRectangle($pen, 0, 0, ($modelCard.Width - 1), ($modelCard.Height - 1))
+  $pen.Dispose()
+})
+$form.Controls.Add($modelCard)
+
+$modelTitle = New-Object System.Windows.Forms.Label
+$modelTitle.Text = 'Local sync model'
+$modelTitle.Font = $fBold
+$modelTitle.ForeColor = $cText
+$modelTitle.AutoSize = $true
+$modelTitle.Location = New-Object System.Drawing.Point(16, 12)
+$modelCard.Controls.Add($modelTitle)
+
+New-Pill $modelCard $script:configSummary.KeyLabel 164 10 150 [System.Drawing.Color]::White $script:configSummary.KeyColor | Out-Null
+New-InfoLine $modelCard 42 $cGreen 'Runs on this computer' 'The browser session opens here, not on SpendWise.'
+New-InfoLine $modelCard 86 $cCyan 'Encrypted handoff' 'The server queues work; the private key stays local.'
+New-Pill $modelCard $script:configSummary.ApiLabel 16 134 138 [System.Drawing.Color]::White $script:configSummary.ApiColor | Out-Null
+New-Pill $modelCard 'Banks + cards' 162 134 82 [System.Drawing.Color]::White $cIndigo | Out-Null
+New-Pill $modelCard '~2/day each' 252 134 72 [System.Drawing.Color]::White $cAmber | Out-Null
+
 # -- Buttons -----------------------------------------------------------------
 $btnMain = New-Object System.Windows.Forms.Button
 $btnMain.Text = 'Start Worker'
@@ -407,7 +545,7 @@ $btnMain.BackColor = $cIndigo
 $btnMain.FlatStyle = 'Flat'
 $btnMain.FlatAppearance.BorderSize = 0
 $btnMain.Size = New-Object System.Drawing.Size(340, 44)
-$btnMain.Location = New-Object System.Drawing.Point(20, 282)
+$btnMain.Location = New-Object System.Drawing.Point(20, 482)
 $btnMain.Cursor = 'Hand'
 $form.Controls.Add($btnMain)
 
@@ -419,7 +557,7 @@ $btnRun.BackColor = $cCard2
 $btnRun.FlatStyle = 'Flat'
 $btnRun.FlatAppearance.BorderSize = 0
 $btnRun.Size = New-Object System.Drawing.Size(340, 36)
-$btnRun.Location = New-Object System.Drawing.Point(20, 334)
+$btnRun.Location = New-Object System.Drawing.Point(20, 534)
 $btnRun.Cursor = 'Hand'
 $form.Controls.Add($btnRun)
 
@@ -432,7 +570,7 @@ $btnClean.FlatStyle = 'Flat'
 $btnClean.FlatAppearance.BorderSize = 1
 $btnClean.FlatAppearance.BorderColor = $cCard2
 $btnClean.Size = New-Object System.Drawing.Size(340, 30)
-$btnClean.Location = New-Object System.Drawing.Point(20, 378)
+$btnClean.Location = New-Object System.Drawing.Point(20, 578)
 $btnClean.Cursor = 'Hand'
 $form.Controls.Add($btnClean)
 
@@ -442,23 +580,23 @@ $chkStartup.Text = ' Launch automatically when Windows starts'
 $chkStartup.Font = $fRegular
 $chkStartup.ForeColor = $cMuted
 $chkStartup.AutoSize = $true
-$chkStartup.Location = New-Object System.Drawing.Point(22, 424)
+$chkStartup.Location = New-Object System.Drawing.Point(22, 624)
 $form.Controls.Add($chkStartup)
 
 $intervalLbl = New-Object System.Windows.Forms.Label
-$intervalLbl.Text = "Checks for work every $IntervalMinutes minutes. Only contacts your bank when a sync is queued (max ~2/day per bank). A stuck sync is auto-cancelled after $MaxRunMinutes minutes."
+$intervalLbl.Text = "Checks for queued work every $IntervalMinutes minutes. The watchdog cancels a stuck scrape after $MaxRunMinutes minutes, so the window never sits on Syncing forever."
 $intervalLbl.Font = $fSmall
 $intervalLbl.ForeColor = $cMuted
 $intervalLbl.Size = New-Object System.Drawing.Size(340, 48)
-$intervalLbl.Location = New-Object System.Drawing.Point(22, 454)
+$intervalLbl.Location = New-Object System.Drawing.Point(22, 654)
 $form.Controls.Add($intervalLbl)
 
 $footer = New-Object System.Windows.Forms.Label
-$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.4.1732'
+$footer.Text = 'SpendWise . by Hananel Sabag . build 26.7.7.1324'
 $footer.Font = $fSmall
 $footer.ForeColor = $cGray
 $footer.AutoSize = $true
-$footer.Location = New-Object System.Drawing.Point(22, 522)
+$footer.Location = New-Object System.Drawing.Point(22, 706)
 $form.Controls.Add($footer)
 
 # -- Tray icon ---------------------------------------------------------------
@@ -715,7 +853,3 @@ try {
   $mutex.ReleaseMutex()
   $mutex.Dispose()
 }
-
-
-
-

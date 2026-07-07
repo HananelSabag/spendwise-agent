@@ -10,7 +10,11 @@ const log = logger('api');
 function base() {
   const url = process.env.API_URL;
   if (!url) throw new Error('API_URL is not set');
-  if (!url.startsWith('https://')) throw new Error('API_URL must use https://');
+  const parsed = new URL(url);
+  const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
+    throw new Error('API_URL must use https:// unless it points to localhost/127.0.0.1');
+  }
   return url.replace(/\/+$/, '');
 }
 

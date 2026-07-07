@@ -29,11 +29,69 @@ const ENV_CREDS = {
       nationalID: process.env.YAHAV_NATIONAL_ID,
     }),
   },
+  hapoalim: {
+    required: ['HAPOALIM_USER_CODE', 'HAPOALIM_PASSWORD'],
+    build: () => ({
+      userCode: process.env.HAPOALIM_USER_CODE,
+      password: process.env.HAPOALIM_PASSWORD,
+    }),
+  },
   leumi: {
     required: ['LEUMI_USERNAME', 'LEUMI_PASSWORD'],
     build: () => ({
       username: process.env.LEUMI_USERNAME,
       password: process.env.LEUMI_PASSWORD,
+    }),
+  },
+  mizrahi: {
+    required: ['MIZRAHI_USERNAME', 'MIZRAHI_PASSWORD'],
+    build: () => ({
+      username: process.env.MIZRAHI_USERNAME,
+      password: process.env.MIZRAHI_PASSWORD,
+    }),
+  },
+  discount: {
+    required: ['DISCOUNT_ID', 'DISCOUNT_PASSWORD', 'DISCOUNT_NUM'],
+    build: () => ({
+      id: process.env.DISCOUNT_ID,
+      password: process.env.DISCOUNT_PASSWORD,
+      num: process.env.DISCOUNT_NUM,
+    }),
+  },
+  mercantile: {
+    required: ['MERCANTILE_ID', 'MERCANTILE_PASSWORD', 'MERCANTILE_NUM'],
+    build: () => ({
+      id: process.env.MERCANTILE_ID,
+      password: process.env.MERCANTILE_PASSWORD,
+      num: process.env.MERCANTILE_NUM,
+    }),
+  },
+  otsar_hahayal: {
+    required: ['OTSAR_USERNAME', 'OTSAR_PASSWORD'],
+    build: () => ({
+      username: process.env.OTSAR_USERNAME,
+      password: process.env.OTSAR_PASSWORD,
+    }),
+  },
+  beinleumi: {
+    required: ['BEINLEUMI_USERNAME', 'BEINLEUMI_PASSWORD'],
+    build: () => ({
+      username: process.env.BEINLEUMI_USERNAME,
+      password: process.env.BEINLEUMI_PASSWORD,
+    }),
+  },
+  massad: {
+    required: ['MASSAD_USERNAME', 'MASSAD_PASSWORD'],
+    build: () => ({
+      username: process.env.MASSAD_USERNAME,
+      password: process.env.MASSAD_PASSWORD,
+    }),
+  },
+  pagi: {
+    required: ['PAGI_USERNAME', 'PAGI_PASSWORD'],
+    build: () => ({
+      username: process.env.PAGI_USERNAME,
+      password: process.env.PAGI_PASSWORD,
     }),
   },
   isracard: {
@@ -44,19 +102,26 @@ const ENV_CREDS = {
       password: process.env.ISRACARD_PASSWORD,
     }),
   },
+  amex: {
+    required: ['AMEX_ID', 'AMEX_CARD6', 'AMEX_PASSWORD'],
+    build: () => ({
+      id: process.env.AMEX_ID,
+      card6Digits: process.env.AMEX_CARD6,
+      password: process.env.AMEX_PASSWORD,
+    }),
+  },
+  visa_cal: {
+    required: ['VISA_CAL_USERNAME', 'VISA_CAL_PASSWORD'],
+    build: () => ({
+      username: process.env.VISA_CAL_USERNAME,
+      password: process.env.VISA_CAL_PASSWORD,
+    }),
+  },
   max: {
     required: ['MAX_USERNAME', 'MAX_PASSWORD'],
     build: () => ({
       username: process.env.MAX_USERNAME,
       password: process.env.MAX_PASSWORD,
-    }),
-  },
-  discount: {
-    required: ['DISCOUNT_ID', 'DISCOUNT_PASSWORD', 'DISCOUNT_NUM'],
-    build: () => ({
-      id: process.env.DISCOUNT_ID,
-      password: process.env.DISCOUNT_PASSWORD,
-      num: process.env.DISCOUNT_NUM,
     }),
   },
 };

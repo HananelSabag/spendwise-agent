@@ -92,6 +92,8 @@ npm test                    # unit tests (crypto envelope, mapping)
 
 Server side (Render env vars): `BANK_AGENT_KEY` (same value as `.env` here) and
 `BANK_AGENT_PUBLIC_KEY` (printed by `npm run keys`).
+For local development only, `API_URL=http://127.0.0.1:5000/api/v1` is allowed;
+non-local agent targets must use HTTPS.
 
 ## Modes
 
@@ -107,10 +109,19 @@ Server side (Render env vars): `BANK_AGENT_KEY` (same value as `.env` here) and
 | Bank | Source id | Credentials |
 |------|-----------|-------------|
 | Bank Yahav | `yahav` | username, password, national ID |
+| Bank Hapoalim | `hapoalim` | user code, password |
 | Bank Leumi | `leumi` | username, password |
+| Mizrahi Bank | `mizrahi` | username, password |
+| Discount Bank | `discount` | ID, password, identification code |
+| Mercantile Bank | `mercantile` | ID, password, identification code |
+| Bank Otsar Hahayal | `otsar_hahayal` | username, password |
+| Beinleumi | `beinleumi` | username, password |
+| Massad | `massad` | username, password |
+| Pagi | `pagi` | username, password |
 | Isracard | `isracard` | ID, card last-6, password |
+| Amex | `amex` | ID, card last-6, password |
+| Visa Cal / CAL | `visa_cal` | username, password |
 | Max | `max` | username, password |
-| Discount | `discount` | ID, password, identification code |
 
 Multiple accounts under one login are supported — each is tracked separately,
 and you can toggle any account's sync on/off from SpendWise. Yahav balance is
