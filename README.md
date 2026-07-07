@@ -149,6 +149,7 @@ src/
 ├── api/client.js       claim / report / notify — the only network surface
 └── utils/              paths, leveled logger, cooldown state, lock
 worker/                 SpendWise Worker desktop app (C# WinForms + build scripts)
+SpendWise Default Worker/ local ignored bundle for the default hosted worker
 tools/                  key generation, offline balance-HTML analyzer
 test/                   node --test unit tests
 patches/                israeli-bank-scrapers fixes (auto-applied)

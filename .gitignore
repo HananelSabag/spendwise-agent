@@ -19,6 +19,7 @@ worker/desktop/obj/
 # Packaged runnable copy of the worker (exe + logo + shortcuts) — a local,
 # organized "app" bundle built from worker/; regenerable, not source.
 Worker Windows App/
+SpendWise Default Worker/
 
 # Scraped data (financial info stays local)
 scraped-data/

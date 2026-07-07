@@ -58,6 +58,7 @@ internal sealed class WorkerForm : Form
     private readonly string _buildVersion;
 
     private readonly WorkerState _state;
+    private readonly WorkerProfile _profile;
     private I18n _i18n;
     private bool _running;
     private bool _busy;
@@ -96,6 +97,10 @@ internal sealed class WorkerForm : Form
     private Label _headerSubtitle = null!;
     private Label _headerPill = null!;
     private Button _languageButton = null!;
+    private Label _hostTitle = null!;
+    private Label _hostBody = null!;
+    private Label _hostNote = null!;
+    private Label _hostBadge = null!;
     private Label _dot = null!;
     private Label _statusText = null!;
     private Label _nextRun = null!;
@@ -149,6 +154,7 @@ internal sealed class WorkerForm : Form
         _buildVersion = GetType().Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
 
         _state = WorkerState.Load(_stateFile);
+        _profile = WorkerProfile.Load(_workerDir);
         _i18n = I18n.Load(_i18nDir, _state.Language);
 
         _regular = AppFont(10.0f, FontStyle.Regular, "Segoe UI Variable Text", "Segoe UI");
@@ -207,7 +213,7 @@ internal sealed class WorkerForm : Form
     private void BuildUi()
     {
         Text = T("app.title");
-        ClientSize = new Size(420, 790);
+        ClientSize = new Size(640, 880);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -216,75 +222,83 @@ internal sealed class WorkerForm : Form
         Font = _regular;
         Icon = LoadIcon();
 
-        var header = new GradientHeader(_indigoDeep, _bg, _card2) { Bounds = new Rectangle(0, 0, 420, 88) };
+        var header = new GradientHeader(_indigoDeep, _bg, _card2) { Bounds = new Rectangle(0, 0, 640, 96) };
         Controls.Add(header);
 
         var logo = new PictureBox
         {
-            Bounds = new Rectangle(24, 22, 44, 44),
+            Bounds = new Rectangle(28, 24, 48, 48),
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.Transparent,
-            Image = LoadLogo(44)
+            Image = LoadLogo(48)
         };
         header.Controls.Add(logo);
 
-        _headerTitle = NewLabel(T("app.title"), _title, Color.White, new Rectangle(84, 20, 210, 26), ContentAlignment.MiddleLeft, true);
-        _headerSubtitle = NewLabel(T("header.subtitle"), _small, Color.FromArgb(199, 210, 254), new Rectangle(86, 48, 220, 20), ContentAlignment.MiddleLeft, true);
+        _headerTitle = NewLabel(T("app.title"), _title, Color.White, new Rectangle(94, 24, 300, 28), ContentAlignment.MiddleLeft, true);
+        _headerSubtitle = NewLabel(T("header.subtitle"), _small, Color.FromArgb(199, 210, 254), new Rectangle(96, 56, 320, 20), ContentAlignment.MiddleLeft, true);
         header.Controls.Add(_headerTitle);
         header.Controls.Add(_headerSubtitle);
 
-        _languageButton = NewButton(T("meta.toggle"), new Rectangle(318, 13, 74, 26), _panel, Color.White, _pillFont);
+        _languageButton = NewButton(T("meta.toggle"), new Rectangle(536, 18, 76, 28), _panel, Color.White, _pillFont);
         _languageButton.FlatAppearance.BorderSize = 1;
         _languageButton.FlatAppearance.BorderColor = Color.FromArgb(129, 140, 248);
         header.Controls.Add(_languageButton);
 
-        _headerPill = Pill(T("header.pill"), new Rectangle(294, 48, 98, 24), Color.White, Color.FromArgb(34, 197, 94));
+        _headerPill = Pill(T("header.pill"), new Rectangle(454, 56, 158, 26), Color.White, Color.FromArgb(34, 197, 94));
         header.Controls.Add(_headerPill);
 
-        var statusCard = new CardPanel(_card, _border) { Bounds = new Rectangle(24, 106, 372, 122) };
+        var hostCard = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 112, 592, 112) };
+        Controls.Add(hostCard);
+        _hostTitle = NewLabel("", _bold, _text, new Rectangle(24, 18, 360, 24), ContentAlignment.MiddleLeft);
+        _hostBody = NewLabel("", _regular, _muted, new Rectangle(24, 48, 420, 40), ContentAlignment.TopLeft);
+        _hostNote = NewLabel("", _small, _gray, new Rectangle(24, 88, 520, 18), ContentAlignment.MiddleLeft);
+        _hostBadge = Pill("", new Rectangle(424, 18, 144, 28), Color.White, _indigo);
+        hostCard.Controls.AddRange(new Control[] { _hostTitle, _hostBody, _hostNote, _hostBadge });
+
+        var statusCard = new CardPanel(_card, _border) { Bounds = new Rectangle(24, 240, 592, 118) };
         Controls.Add(statusCard);
         _dot = NewLabel("\u25CF", new Font("Segoe UI", 15, FontStyle.Regular), _gray, new Rectangle(18, 13, 22, 24), ContentAlignment.MiddleCenter);
         _dot.AutoEllipsis = false;
         _statusText = NewLabel(T("status.stopped"), _bold, _text, new Rectangle(44, 17, 172, 22), ContentAlignment.MiddleLeft);
-        _nextRun = NewLabel("", _small, _muted, new Rectangle(216, 19, 138, 20), ContentAlignment.MiddleRight);
-        _lastResult = NewLabel(T("result.notRunYet"), _regular, _muted, new Rectangle(44, 51, 308, 24), ContentAlignment.MiddleLeft);
-        _lastRun = NewLabel("", _small, _gray, new Rectangle(44, 77, 308, 18), ContentAlignment.MiddleLeft);
-        _statusHint = NewLabel(T("status.hint"), _small, _gray, new Rectangle(44, 97, 308, 18), ContentAlignment.MiddleLeft);
+        _nextRun = NewLabel("", _small, _muted, new Rectangle(410, 19, 150, 20), ContentAlignment.MiddleRight);
+        _lastResult = NewLabel(T("result.notRunYet"), _regular, _muted, new Rectangle(44, 51, 500, 24), ContentAlignment.MiddleLeft);
+        _lastRun = NewLabel("", _small, _gray, new Rectangle(44, 77, 500, 18), ContentAlignment.MiddleLeft);
+        _statusHint = NewLabel(T("status.hint"), _small, _gray, new Rectangle(44, 97, 500, 18), ContentAlignment.MiddleLeft);
         statusCard.Controls.AddRange(new Control[] { _dot, _statusText, _nextRun, _lastResult, _lastRun, _statusHint });
 
-        var checks = StatCard(new Rectangle(24, 244, 178, 72), _indigo, out _checksNumber, out _checksLabel);
-        var txns = StatCard(new Rectangle(218, 244, 178, 72), _green, out _transactionsNumber, out _transactionsLabel);
+        var checks = StatCard(new Rectangle(24, 374, 286, 78), _indigo, out _checksNumber, out _checksLabel);
+        var txns = StatCard(new Rectangle(330, 374, 286, 78), _green, out _transactionsNumber, out _transactionsLabel);
         Controls.Add(checks);
         Controls.Add(txns);
         _checksNumber.Text = _state.TotalRuns.ToString(CultureInfo.InvariantCulture);
         _transactionsNumber.Text = GetSyncTotals().newTxns.ToString(CultureInfo.InvariantCulture);
 
-        var model = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 332, 372, 164) };
+        var model = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 468, 592, 166) };
         Controls.Add(model);
-        _modelTitle = NewLabel(T("model.title"), _bold, _text, new Rectangle(18, 14, 175, 22), ContentAlignment.MiddleLeft);
-        _keyPill = Pill("", new Rectangle(218, 12, 132, 24), Color.White, _green);
+        _modelTitle = NewLabel(T("model.title"), _bold, _text, new Rectangle(22, 16, 280, 24), ContentAlignment.MiddleLeft);
+        _keyPill = Pill("", new Rectangle(410, 14, 156, 26), Color.White, _green);
         model.Controls.AddRange(new Control[] { _modelTitle, _keyPill });
 
         AddInfoLine(model, 50, _green, out _runMark, out _runTitle, out _runBody);
         AddInfoLine(model, 94, _cyan, out _handoffMark, out _handoffTitle, out _handoffBody);
-        _apiPill = Pill("", new Rectangle(18, 132, 138, 24), Color.White, _cyan);
-        _banksPill = Pill(T("model.banksCards"), new Rectangle(164, 132, 92, 24), Color.White, _indigo);
-        _freqPill = Pill(T("model.frequency"), new Rectangle(264, 132, 88, 24), Color.White, _amber);
+        _apiPill = Pill("", new Rectangle(22, 132, 170, 26), Color.White, _cyan);
+        _banksPill = Pill(T("model.banksCards"), new Rectangle(204, 132, 160, 26), Color.White, _indigo);
+        _freqPill = Pill(T("model.frequency"), new Rectangle(376, 132, 120, 26), Color.White, _amber);
         model.Controls.AddRange(new Control[] { _apiPill, _banksPill, _freqPill });
 
-        _mainButton = NewButton(T("buttons.start"), new Rectangle(24, 512, 372, 46), _indigo, Color.White, _bold);
-        _runButton = NewButton(T("buttons.runOnce"), new Rectangle(24, 570, 372, 38), _card2, _text, _regular);
-        _cleanButton = NewButton(T("buttons.clean"), new Rectangle(24, 620, 372, 32), _bg, _amber, _small);
+        _mainButton = NewButton(T("buttons.start"), new Rectangle(24, 652, 592, 48), _indigo, Color.White, _bold);
+        _runButton = NewButton(T("buttons.runOnce"), new Rectangle(24, 716, 286, 38), _card2, _text, _regular);
+        _cleanButton = NewButton(T("buttons.clean"), new Rectangle(330, 716, 286, 38), _bg, _amber, _small);
         SetButtonBorder(_cleanButton, _card2, 1);
-        _logButton = NewButton(T("buttons.openLog"), new Rectangle(24, 662, 180, 32), _panel, _cyan, _small);
+        _logButton = NewButton(T("buttons.openLog"), new Rectangle(24, 766, 286, 34), _panel, _cyan, _small);
         SetButtonBorder(_logButton, _border, 1);
-        _folderButton = NewButton(T("buttons.openFolder"), new Rectangle(216, 662, 180, 32), _panel, _text, _small);
+        _folderButton = NewButton(T("buttons.openFolder"), new Rectangle(330, 766, 286, 34), _panel, _text, _small);
         SetButtonBorder(_folderButton, _border, 1);
         Controls.AddRange(new Control[] { _mainButton, _runButton, _cleanButton, _logButton, _folderButton });
 
         _startupCheck = new CheckBox
         {
-            Bounds = new Rectangle(25, 706, 220, 24),
+            Bounds = new Rectangle(25, 816, 286, 24),
             Font = _small,
             ForeColor = _muted,
             BackColor = _bg,
@@ -293,10 +307,10 @@ internal sealed class WorkerForm : Form
         };
         Controls.Add(_startupCheck);
 
-        _intervalLabel = NewLabel("", _small, _muted, new Rectangle(24, 732, 372, 34), ContentAlignment.TopLeft);
+        _intervalLabel = NewLabel("", _small, _muted, new Rectangle(24, 838, 592, 22), ContentAlignment.TopLeft);
         Controls.Add(_intervalLabel);
 
-        _footer = NewLabel("", _small, _gray, new Rectangle(24, 764, 372, 20), ContentAlignment.MiddleLeft);
+        _footer = NewLabel("", _small, _gray, new Rectangle(390, 816, 226, 24), ContentAlignment.MiddleRight);
         Controls.Add(_footer);
 
         var menu = new ContextMenuStrip();
@@ -388,8 +402,8 @@ internal sealed class WorkerForm : Form
     private CardPanel StatCard(Rectangle bounds, Color accent, out Label number, out Label label)
     {
         var card = new CardPanel(_card, _border) { Bounds = bounds, Accent = accent };
-        number = NewLabel("0", _stat, accent, new Rectangle(18, 6, 120, 36), ContentAlignment.MiddleLeft);
-        label = NewLabel("", _small, _muted, new Rectangle(18, 45, 138, 18), ContentAlignment.MiddleLeft);
+        number = NewLabel("0", _stat, accent, new Rectangle(18, 6, bounds.Width - 36, 38), ContentAlignment.MiddleLeft);
+        label = NewLabel("", _small, _muted, new Rectangle(18, 49, bounds.Width - 36, 18), ContentAlignment.MiddleLeft);
         card.Controls.Add(number);
         card.Controls.Add(label);
         return card;
@@ -497,6 +511,7 @@ internal sealed class WorkerForm : Form
         _headerSubtitle.Text = T("header.subtitle");
         _headerPill.Text = T("header.pill");
         _languageButton.Text = T("meta.toggle");
+        ApplyHostCopy(he);
 
         foreach (var label in new[] {
             _headerSubtitle, _statusText, _lastResult, _lastRun, _statusHint, _checksLabel,
@@ -548,6 +563,26 @@ internal sealed class WorkerForm : Form
         UpdateBusyState();
     }
 
+    private void ApplyHostCopy(bool he)
+    {
+        var key = _profile.IsDefaultHost ? "host.default" : "host.general";
+        var owner = string.IsNullOrWhiteSpace(_profile.OwnerName) ? "Hananel" : _profile.OwnerName;
+        _hostTitle.Text = T(key + "Title");
+        _hostBody.Text = string.Format(T(key + "Body"), owner);
+        _hostNote.Text = T(key + "Note");
+        _hostBadge.Text = T(key + "Badge");
+
+        var align = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+        var bodyAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
+        _hostTitle.TextAlign = align;
+        _hostBody.TextAlign = bodyAlign;
+        _hostNote.TextAlign = align;
+        _hostTitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _hostBody.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _hostNote.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _hostBadge.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+    }
+
     private void LayoutInfoLines(bool he)
     {
         LayoutInfoLine(_runMark, _runTitle, _runBody, 50, he);
@@ -558,21 +593,21 @@ internal sealed class WorkerForm : Form
     {
         if (he)
         {
-            _dot.Bounds = new Rectangle(330, 13, 22, 24);
-            _statusText.Bounds = new Rectangle(44, 17, 276, 22);
+            _dot.Bounds = new Rectangle(544, 13, 22, 24);
+            _statusText.Bounds = new Rectangle(44, 17, 488, 22);
             _statusText.TextAlign = ContentAlignment.MiddleRight;
             _statusText.RightToLeft = RightToLeft.Yes;
-            _nextRun.Bounds = new Rectangle(44, 19, 138, 20);
+            _nextRun.Bounds = new Rectangle(44, 19, 170, 20);
             _nextRun.TextAlign = nextRunAlign;
             _nextRun.RightToLeft = RightToLeft.Yes;
             return;
         }
 
         _dot.Bounds = new Rectangle(18, 13, 22, 24);
-        _statusText.Bounds = new Rectangle(44, 17, 172, 22);
+        _statusText.Bounds = new Rectangle(44, 17, 260, 22);
         _statusText.TextAlign = ContentAlignment.MiddleLeft;
         _statusText.RightToLeft = RightToLeft.No;
-        _nextRun.Bounds = new Rectangle(216, 19, 138, 20);
+        _nextRun.Bounds = new Rectangle(410, 19, 150, 20);
         _nextRun.TextAlign = nextRunAlign;
         _nextRun.RightToLeft = RightToLeft.No;
     }
@@ -581,9 +616,9 @@ internal sealed class WorkerForm : Form
     {
         if (he)
         {
-            mark.Bounds = new Rectangle(326, y + 4, 18, 18);
-            title.Bounds = new Rectangle(42, y, 274, 22);
-            body.Bounds = new Rectangle(42, y + 24, 274, 18);
+            mark.Bounds = new Rectangle(548, y + 4, 18, 18);
+            title.Bounds = new Rectangle(50, y, 486, 22);
+            body.Bounds = new Rectangle(50, y + 24, 486, 18);
             title.TextAlign = ContentAlignment.MiddleRight;
             body.TextAlign = ContentAlignment.MiddleRight;
             title.RightToLeft = RightToLeft.Yes;
@@ -591,9 +626,9 @@ internal sealed class WorkerForm : Form
             return;
         }
 
-        mark.Bounds = new Rectangle(18, y + 4, 18, 18);
-        title.Bounds = new Rectangle(42, y, 300, 22);
-        body.Bounds = new Rectangle(42, y + 24, 300, 18);
+        mark.Bounds = new Rectangle(22, y + 4, 18, 18);
+        title.Bounds = new Rectangle(50, y, 500, 22);
+        body.Bounds = new Rectangle(50, y + 24, 500, 18);
         title.TextAlign = ContentAlignment.MiddleLeft;
         body.TextAlign = ContentAlignment.MiddleLeft;
         title.RightToLeft = RightToLeft.No;
@@ -1039,6 +1074,34 @@ internal sealed class WorkerForm : Form
 }
 
 internal sealed record ConfigSummary(string ApiLabel, Color ApiColor, string KeyLabel, Color KeyColor);
+
+internal sealed class WorkerProfile
+{
+    public string Mode { get; set; } = "personal";
+    public string OwnerName { get; set; } = "";
+
+    public bool IsDefaultHost => Mode.Equals("default-host", StringComparison.OrdinalIgnoreCase);
+
+    public static WorkerProfile Load(string workerDir)
+    {
+        var path = Path.Combine(workerDir, "worker-profile.json");
+        try
+        {
+            if (!File.Exists(path)) return new WorkerProfile();
+            var profile = JsonSerializer.Deserialize<WorkerProfile>(File.ReadAllText(path), JsonOptions());
+            if (profile is null) return new WorkerProfile();
+            if (string.IsNullOrWhiteSpace(profile.Mode)) profile.Mode = "personal";
+            profile.OwnerName = profile.OwnerName?.Trim() ?? "";
+            return profile;
+        }
+        catch
+        {
+            return new WorkerProfile();
+        }
+    }
+
+    private static JsonSerializerOptions JsonOptions() => new() { PropertyNameCaseInsensitive = true };
+}
 
 internal sealed class WorkerState
 {

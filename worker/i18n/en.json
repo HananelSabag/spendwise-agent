@@ -11,6 +11,16 @@
     "subtitle": "Bank sync agent",
     "pill": "LOCAL-FIRST"
   },
+  "host": {
+    "generalTitle": "Local control center",
+    "generalBody": "This computer runs only your own sync jobs. Your private key stays local; SpendWise only queues encrypted work.",
+    "generalNote": "In the next flow, each user will be able to pair their own machine.",
+    "generalBadge": "Personal Worker",
+    "defaultTitle": "Official SpendWise host",
+    "defaultBody": "Hi {0}, this machine runs the default SpendWise sync jobs. Keep it online when you want queued work to continue from here.",
+    "defaultNote": "Your responsibility: keep this computer and its network available when sync is needed.",
+    "defaultBadge": "Hananel Host"
+  },
   "config": {
     "apiNotSet": "API target not set",
     "cloudApi": "SpendWise cloud API",
