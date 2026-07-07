@@ -15,18 +15,32 @@ internal static class Program
         using var mutex = new Mutex(true, @"Global\SpendWiseWorkerSingleton", out var createdNew);
         if (!createdNew)
         {
-            MessageBox.Show(
-                "SpendWise Worker is already running.\nCheck your system tray.",
-                "SpendWise Worker",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            LogStartupError("Duplicate launch ignored because SpendWise Worker is already running.");
             return;
         }
+
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => LogStartupError(e.Exception.ToString());
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex) LogStartupError(ex.ToString());
+            else LogStartupError("Unhandled non-Exception error: " + e.ExceptionObject);
+        };
 
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new WorkerForm(args));
+    }
+
+    private static void LogStartupError(string message)
+    {
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "worker-error.log");
+            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+        }
+        catch { }
     }
 }
 
@@ -93,8 +107,10 @@ internal sealed class WorkerForm : Form
     private Label _transactionsNumber = null!;
     private Label _transactionsLabel = null!;
     private Label _modelTitle = null!;
+    private Label _runMark = null!;
     private Label _runTitle = null!;
     private Label _runBody = null!;
+    private Label _handoffMark = null!;
     private Label _handoffTitle = null!;
     private Label _handoffBody = null!;
     private Label _keyPill = null!;
@@ -104,6 +120,8 @@ internal sealed class WorkerForm : Form
     private Button _mainButton = null!;
     private Button _runButton = null!;
     private Button _cleanButton = null!;
+    private Button _logButton = null!;
+    private Button _folderButton = null!;
     private CheckBox _startupCheck = null!;
     private Label _intervalLabel = null!;
     private Label _footer = null!;
@@ -117,6 +135,7 @@ internal sealed class WorkerForm : Form
     private readonly System.Windows.Forms.Timer _countdownTimer = new();
     private readonly System.Windows.Forms.Timer _watchdogTimer = new();
     private readonly System.Windows.Forms.Timer _pulseTimer = new();
+    private readonly System.Windows.Forms.Timer _refreshTimer = new();
 
     public WorkerForm(string[] args)
     {
@@ -188,7 +207,7 @@ internal sealed class WorkerForm : Form
     private void BuildUi()
     {
         Text = T("app.title");
-        ClientSize = new Size(420, 760);
+        ClientSize = new Size(420, 790);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -224,7 +243,8 @@ internal sealed class WorkerForm : Form
 
         var statusCard = new CardPanel(_card, _border) { Bounds = new Rectangle(24, 106, 372, 122) };
         Controls.Add(statusCard);
-        _dot = NewLabel("●", new Font("Segoe UI", 15, FontStyle.Regular), _gray, new Rectangle(18, 13, 22, 24), ContentAlignment.MiddleCenter);
+        _dot = NewLabel("\u25CF", new Font("Segoe UI", 15, FontStyle.Regular), _gray, new Rectangle(18, 13, 22, 24), ContentAlignment.MiddleCenter);
+        _dot.AutoEllipsis = false;
         _statusText = NewLabel(T("status.stopped"), _bold, _text, new Rectangle(44, 17, 172, 22), ContentAlignment.MiddleLeft);
         _nextRun = NewLabel("", _small, _muted, new Rectangle(216, 19, 138, 20), ContentAlignment.MiddleRight);
         _lastResult = NewLabel(T("result.notRunYet"), _regular, _muted, new Rectangle(44, 51, 308, 24), ContentAlignment.MiddleLeft);
@@ -245,8 +265,8 @@ internal sealed class WorkerForm : Form
         _keyPill = Pill("", new Rectangle(218, 12, 132, 24), Color.White, _green);
         model.Controls.AddRange(new Control[] { _modelTitle, _keyPill });
 
-        AddInfoLine(model, 50, _green, out _runTitle, out _runBody);
-        AddInfoLine(model, 94, _cyan, out _handoffTitle, out _handoffBody);
+        AddInfoLine(model, 50, _green, out _runMark, out _runTitle, out _runBody);
+        AddInfoLine(model, 94, _cyan, out _handoffMark, out _handoffTitle, out _handoffBody);
         _apiPill = Pill("", new Rectangle(18, 132, 138, 24), Color.White, _cyan);
         _banksPill = Pill(T("model.banksCards"), new Rectangle(164, 132, 92, 24), Color.White, _indigo);
         _freqPill = Pill(T("model.frequency"), new Rectangle(264, 132, 88, 24), Color.White, _amber);
@@ -255,13 +275,16 @@ internal sealed class WorkerForm : Form
         _mainButton = NewButton(T("buttons.start"), new Rectangle(24, 512, 372, 46), _indigo, Color.White, _bold);
         _runButton = NewButton(T("buttons.runOnce"), new Rectangle(24, 570, 372, 38), _card2, _text, _regular);
         _cleanButton = NewButton(T("buttons.clean"), new Rectangle(24, 620, 372, 32), _bg, _amber, _small);
-        _cleanButton.FlatAppearance.BorderSize = 1;
-        _cleanButton.FlatAppearance.BorderColor = _card2;
-        Controls.AddRange(new Control[] { _mainButton, _runButton, _cleanButton });
+        SetButtonBorder(_cleanButton, _card2, 1);
+        _logButton = NewButton(T("buttons.openLog"), new Rectangle(24, 662, 180, 32), _panel, _cyan, _small);
+        SetButtonBorder(_logButton, _border, 1);
+        _folderButton = NewButton(T("buttons.openFolder"), new Rectangle(216, 662, 180, 32), _panel, _text, _small);
+        SetButtonBorder(_folderButton, _border, 1);
+        Controls.AddRange(new Control[] { _mainButton, _runButton, _cleanButton, _logButton, _folderButton });
 
         _startupCheck = new CheckBox
         {
-            Bounds = new Rectangle(25, 666, 220, 24),
+            Bounds = new Rectangle(25, 706, 220, 24),
             Font = _small,
             ForeColor = _muted,
             BackColor = _bg,
@@ -270,10 +293,10 @@ internal sealed class WorkerForm : Form
         };
         Controls.Add(_startupCheck);
 
-        _intervalLabel = NewLabel("", _small, _muted, new Rectangle(24, 696, 372, 34), ContentAlignment.TopLeft);
+        _intervalLabel = NewLabel("", _small, _muted, new Rectangle(24, 732, 372, 34), ContentAlignment.TopLeft);
         Controls.Add(_intervalLabel);
 
-        _footer = NewLabel("", _small, _gray, new Rectangle(24, 734, 372, 20), ContentAlignment.MiddleLeft);
+        _footer = NewLabel("", _small, _gray, new Rectangle(24, 764, 372, 20), ContentAlignment.MiddleLeft);
         Controls.Add(_footer);
 
         var menu = new ContextMenuStrip();
@@ -294,6 +317,8 @@ internal sealed class WorkerForm : Form
         _mainButton.Click += (_, _) => { if (_running) StopWorker(); else StartWorker(); };
         _runButton.Click += (_, _) => InvokeAgentRun();
         _cleanButton.Click += (_, _) => CleanStuckProcesses();
+        _logButton.Click += (_, _) => OpenLog();
+        _folderButton.Click += (_, _) => OpenAgentFolder();
         _startupCheck.Click += (_, _) => SetStartup(_startupCheck.Checked);
         _miOpen.Click += (_, _) => ShowFromTray();
         _miRun.Click += (_, _) => InvokeAgentRun();
@@ -319,23 +344,36 @@ internal sealed class WorkerForm : Form
 
     private Button NewButton(string text, Rectangle bounds, Color back, Color fore, Font font)
     {
-        var button = new Button
+        var button = new RoundedButton
         {
             Text = text,
             Bounds = bounds,
             BackColor = back,
             ForeColor = fore,
             Font = font,
-            FlatStyle = FlatStyle.Flat,
-            Cursor = Cursors.Hand
+            Cursor = Cursors.Hand,
+            Radius = bounds.Height >= 40 ? 10 : 8,
+            HoverBackColor = ControlPaint.Light(back, 0.08f)
         };
-        button.FlatAppearance.BorderSize = 0;
         return button;
+    }
+
+    private static void SetButtonBorder(Button button, Color color, int size)
+    {
+        if (button is RoundedButton rounded)
+        {
+            rounded.BorderColor = color;
+            rounded.BorderSize = size;
+            return;
+        }
+
+        button.FlatAppearance.BorderColor = color;
+        button.FlatAppearance.BorderSize = size;
     }
 
     private Label Pill(string text, Rectangle bounds, Color fore, Color back)
     {
-        return new Label
+        return new PillLabel
         {
             Text = text,
             Bounds = bounds,
@@ -357,9 +395,10 @@ internal sealed class WorkerForm : Form
         return card;
     }
 
-    private void AddInfoLine(Control parent, int y, Color accent, out Label title, out Label body)
+    private void AddInfoLine(Control parent, int y, Color accent, out Label mark, out Label title, out Label body)
     {
-        var mark = NewLabel("●", new Font("Segoe UI", 9, FontStyle.Regular), accent, new Rectangle(18, y + 4, 18, 18), ContentAlignment.MiddleCenter);
+        mark = NewLabel("\u25CF", new Font("Segoe UI", 9, FontStyle.Regular), accent, new Rectangle(18, y + 4, 18, 18), ContentAlignment.MiddleCenter);
+        mark.AutoEllipsis = false;
         title = NewLabel("", _bold, _text, new Rectangle(42, y, 300, 22), ContentAlignment.MiddleLeft);
         body = NewLabel("", _small, _muted, new Rectangle(42, y + 24, 300, 18), ContentAlignment.MiddleLeft);
         parent.Controls.AddRange(new Control[] { mark, title, body });
@@ -440,6 +479,10 @@ internal sealed class WorkerForm : Form
         _pulseTimer.Interval = 560;
         _pulseTimer.Tick += (_, _) => PulseTick();
         _pulseTimer.Start();
+
+        _refreshTimer.Interval = 10 * 1000;
+        _refreshTimer.Tick += (_, _) => RefreshSnapshot();
+        _refreshTimer.Start();
     }
 
     private void ApplyLanguage()
@@ -458,14 +501,21 @@ internal sealed class WorkerForm : Form
         foreach (var label in new[] {
             _headerSubtitle, _statusText, _lastResult, _lastRun, _statusHint, _checksLabel,
             _transactionsLabel, _modelTitle, _runTitle, _runBody, _handoffTitle, _handoffBody,
-            _intervalLabel, _footer
+            _intervalLabel
         })
         {
             label.TextAlign = left;
-            label.RightToLeft = RightToLeft.No;
+            label.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
         }
-        _nextRun.TextAlign = right;
+        _footer.TextAlign = ContentAlignment.MiddleLeft;
+        _footer.RightToLeft = RightToLeft.No;
+        LayoutStatusHeader(he, right);
         _startupCheck.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        foreach (var control in new Control[] { _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _keyPill, _apiPill, _banksPill, _freqPill })
+        {
+            control.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        }
+        LayoutInfoLines(he);
 
         _checksLabel.Text = T("stats.serverChecks");
         _transactionsLabel.Text = T("stats.transactionsSynced");
@@ -477,16 +527,12 @@ internal sealed class WorkerForm : Form
         _banksPill.Text = T("model.banksCards");
         _freqPill.Text = T("model.frequency");
 
-        var config = GetConfigSummary();
-        _keyPill.Text = config.KeyLabel;
-        _keyPill.BackColor = config.KeyColor;
-        _apiPill.Text = config.ApiLabel;
-        _apiPill.BackColor = config.ApiColor;
-
         _statusText.Text = T(_statusKey);
         _mainButton.Text = _running ? T("buttons.stop") : T("buttons.start");
         _runButton.Text = T("buttons.runOnce");
         _cleanButton.Text = T("buttons.clean");
+        _logButton.Text = T("buttons.openLog");
+        _folderButton.Text = T("buttons.openFolder");
         _startupCheck.Text = T("startup.label");
         _intervalLabel.Text = string.Format(T("startup.interval"), IntervalMinutes, MaxRunMinutes);
         _footer.Text = string.Format(T("footer"), _buildVersion);
@@ -498,6 +544,60 @@ internal sealed class WorkerForm : Form
 
         UpdateNextRun();
         ParseLastResult();
+        RefreshConfigPills();
+        UpdateBusyState();
+    }
+
+    private void LayoutInfoLines(bool he)
+    {
+        LayoutInfoLine(_runMark, _runTitle, _runBody, 50, he);
+        LayoutInfoLine(_handoffMark, _handoffTitle, _handoffBody, 94, he);
+    }
+
+    private void LayoutStatusHeader(bool he, ContentAlignment nextRunAlign)
+    {
+        if (he)
+        {
+            _dot.Bounds = new Rectangle(330, 13, 22, 24);
+            _statusText.Bounds = new Rectangle(44, 17, 276, 22);
+            _statusText.TextAlign = ContentAlignment.MiddleRight;
+            _statusText.RightToLeft = RightToLeft.Yes;
+            _nextRun.Bounds = new Rectangle(44, 19, 138, 20);
+            _nextRun.TextAlign = nextRunAlign;
+            _nextRun.RightToLeft = RightToLeft.Yes;
+            return;
+        }
+
+        _dot.Bounds = new Rectangle(18, 13, 22, 24);
+        _statusText.Bounds = new Rectangle(44, 17, 172, 22);
+        _statusText.TextAlign = ContentAlignment.MiddleLeft;
+        _statusText.RightToLeft = RightToLeft.No;
+        _nextRun.Bounds = new Rectangle(216, 19, 138, 20);
+        _nextRun.TextAlign = nextRunAlign;
+        _nextRun.RightToLeft = RightToLeft.No;
+    }
+
+    private static void LayoutInfoLine(Label mark, Label title, Label body, int y, bool he)
+    {
+        if (he)
+        {
+            mark.Bounds = new Rectangle(326, y + 4, 18, 18);
+            title.Bounds = new Rectangle(42, y, 274, 22);
+            body.Bounds = new Rectangle(42, y + 24, 274, 18);
+            title.TextAlign = ContentAlignment.MiddleRight;
+            body.TextAlign = ContentAlignment.MiddleRight;
+            title.RightToLeft = RightToLeft.Yes;
+            body.RightToLeft = RightToLeft.Yes;
+            return;
+        }
+
+        mark.Bounds = new Rectangle(18, y + 4, 18, 18);
+        title.Bounds = new Rectangle(42, y, 300, 22);
+        body.Bounds = new Rectangle(42, y + 24, 300, 18);
+        title.TextAlign = ContentAlignment.MiddleLeft;
+        body.TextAlign = ContentAlignment.MiddleLeft;
+        title.RightToLeft = RightToLeft.No;
+        body.RightToLeft = RightToLeft.No;
     }
 
     private void ToggleLanguage()
@@ -509,6 +609,31 @@ internal sealed class WorkerForm : Form
     }
 
     private string T(string key) => _i18n.T(key);
+
+    private void RefreshSnapshot()
+    {
+        _checksNumber.Text = _state.TotalRuns.ToString(CultureInfo.InvariantCulture);
+        _transactionsNumber.Text = GetSyncTotals().newTxns.ToString(CultureInfo.InvariantCulture);
+        RefreshConfigPills();
+        if (!_busy) ParseLastResult();
+        _startupCheck.Checked = TestStartup();
+        _footer.Text = string.Format(T("footer"), _buildVersion);
+    }
+
+    private void RefreshConfigPills()
+    {
+        var config = GetConfigSummary();
+        _keyPill.Text = config.KeyLabel;
+        _keyPill.BackColor = config.KeyColor;
+        _apiPill.Text = config.ApiLabel;
+        _apiPill.BackColor = config.ApiColor;
+    }
+
+    private void UpdateBusyState()
+    {
+        _runButton.Enabled = !_busy;
+        _runButton.Cursor = _busy ? Cursors.Default : Cursors.Hand;
+    }
 
     private ConfigSummary GetConfigSummary()
     {
@@ -651,6 +776,7 @@ internal sealed class WorkerForm : Form
         _busy = false;
         _currentProc = null;
         _runStartedAt = null;
+        UpdateBusyState();
         _lastResult.Text = string.Format(T("result.timeout"), MaxRunMinutes, killed);
         _lastResult.ForeColor = _red;
         _lastRun.Text = string.Format(T("result.lastRun"), DateTime.Now.ToString("dd/MM HH:mm", CultureInfo.InvariantCulture));
@@ -678,6 +804,7 @@ internal sealed class WorkerForm : Form
     {
         if (_busy) return;
         _busy = true;
+        UpdateBusyState();
         _runStartedAt = DateTime.Now;
         SetStatus("status.syncing", _blue);
         _lastRun.Text = string.Format(T("result.started"), DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
@@ -706,6 +833,7 @@ internal sealed class WorkerForm : Form
             _lastResult.Text = T("result.installNode");
             _lastResult.ForeColor = _red;
             _busy = false;
+            UpdateBusyState();
             _runStartedAt = null;
             return;
         }
@@ -720,6 +848,7 @@ internal sealed class WorkerForm : Form
     {
         if (!_busy) return;
         _busy = false;
+        UpdateBusyState();
         _currentProc?.Dispose();
         _currentProc = null;
         _runStartedAt = null;
@@ -780,6 +909,31 @@ internal sealed class WorkerForm : Form
         SetStatus(_running ? "status.running" : "status.idle", _running ? _green : _gray);
         _cleanButton.Enabled = true;
         MessageBox.Show(message, T("cleanup.title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void OpenLog()
+    {
+        try
+        {
+            if (!File.Exists(_logFile)) File.WriteAllText(_logFile, "");
+            Process.Start(new ProcessStartInfo { FileName = _logFile, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, T("buttons.openLog"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void OpenAgentFolder()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = _agentDir, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, T("buttons.openFolder"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private int KillCurrentTree()
@@ -964,6 +1118,91 @@ internal sealed class I18n
     }
 }
 
+internal sealed class RoundedButton : Button
+{
+    private bool _hover;
+    public int Radius { get; set; } = 8;
+    public int BorderSize { get; set; }
+    public Color BorderColor { get; set; } = Color.Transparent;
+    public Color HoverBackColor { get; set; }
+
+    public RoundedButton()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+    }
+
+    protected override void OnMouseEnter(EventArgs e)
+    {
+        _hover = true;
+        Invalidate();
+        base.OnMouseEnter(e);
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        _hover = false;
+        Invalidate();
+        base.OnMouseLeave(e);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        e.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
+
+        var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+        var fill = Enabled ? (_hover ? HoverBackColor : BackColor) : ControlPaint.Dark(BackColor, 0.18f);
+        using var path = UiShape.RoundedPath(rect, Radius);
+        using var brush = new SolidBrush(fill);
+        e.Graphics.FillPath(brush, path);
+
+        if (BorderSize > 0)
+        {
+            using var pen = new Pen(BorderColor, BorderSize);
+            e.Graphics.DrawPath(pen, path);
+        }
+
+        var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                    TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding;
+        if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft;
+        TextRenderer.DrawText(
+            e.Graphics,
+            Text,
+            Font,
+            ClientRectangle,
+            Enabled ? ForeColor : ControlPaint.Dark(ForeColor, 0.35f),
+            flags);
+    }
+}
+
+internal sealed class PillLabel : Label
+{
+    public int Radius { get; set; } = 7;
+
+    public PillLabel()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        e.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
+        using var path = UiShape.RoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), Radius);
+        using var brush = new SolidBrush(BackColor);
+        e.Graphics.FillPath(brush, path);
+
+        var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                    TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding;
+        if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft;
+        TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor, flags);
+    }
+}
+
 internal sealed class GradientHeader : Panel
 {
     private readonly Color _left;
@@ -993,27 +1232,54 @@ internal sealed class CardPanel : Panel
     private readonly Color _back;
     private readonly Color _border;
     public Color? Accent { get; set; }
+    public int Radius { get; set; } = 8;
 
     public CardPanel(Color back, Color border)
     {
         _back = back;
         _border = border;
-        BackColor = back;
+        BackColor = Color.Transparent;
         DoubleBuffered = true;
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        e.Graphics.Clear(Parent?.BackColor ?? _back);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+        using var path = UiShape.RoundedPath(rect, Radius);
         using var back = new SolidBrush(_back);
-        e.Graphics.FillRectangle(back, ClientRectangle);
+        e.Graphics.FillPath(back, path);
         if (Accent is { } accent)
         {
             using var accentBrush = new SolidBrush(accent);
+            var state = e.Graphics.Save();
+            e.Graphics.SetClip(path);
             e.Graphics.FillRectangle(accentBrush, 0, 0, 4, Height);
+            e.Graphics.Restore(state);
         }
 
         using var pen = new Pen(_border);
-        e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+        e.Graphics.DrawPath(pen, path);
         base.OnPaint(e);
+    }
+}
+
+internal static class UiShape
+{
+    public static GraphicsPath RoundedPath(Rectangle rect, int radius)
+    {
+        var path = new GraphicsPath();
+        var d = radius * 2;
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }

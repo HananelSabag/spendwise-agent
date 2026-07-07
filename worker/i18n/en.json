@@ -30,7 +30,7 @@
   },
   "result": {
     "notRunYet": "Not run yet",
-    "lastSync": "Last sync: {0} new transactions, {1} already known",
+    "lastSync": "Synced: {0} new, {1} known",
     "failure": "Last run had a failure - see agent.log",
     "upToDate": "Up to date - no work was waiting",
     "timeout": "Timed out after {0}m - cancelled ({1} process(es) stopped)",
@@ -50,13 +50,15 @@
     "encryptedTitle": "Encrypted handoff",
     "encryptedBody": "The server queues work; the private key stays local.",
     "banksCards": "Banks + cards",
-    "frequency": "~2/day each"
+    "frequency": "~2/day"
   },
   "buttons": {
     "start": "Start Worker",
     "stop": "Stop Worker",
     "runOnce": "Sync once now",
-    "clean": "Clean up stuck processes"
+    "clean": "Clean up stuck processes",
+    "openLog": "Open log",
+    "openFolder": "Agent folder"
   },
   "startup": {
     "label": "Launch automatically when Windows starts",

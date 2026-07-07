@@ -30,7 +30,7 @@
   },
   "result": {
     "notRunYet": "עוד לא רץ",
-    "lastSync": "סנכרון אחרון: {0} עסקאות חדשות, {1} כבר היו מוכרות",
+    "lastSync": "סונכרן: {0} חדשות, {1} מוכרות",
     "failure": "הריצה האחרונה נכשלה - ראה agent.log",
     "upToDate": "מעודכן - אין משימות ממתינות",
     "timeout": "בוטל אחרי {0} דק' ({1} תהליכים נסגרו)",
@@ -50,13 +50,15 @@
     "encryptedTitle": "מסירה מוצפנת",
     "encryptedBody": "השרת מתזמן משימות; המפתח הפרטי נשאר מקומי.",
     "banksCards": "בנקים + אשראי",
-    "frequency": "~2 ליום לכל חיבור"
+    "frequency": "~2 ביום"
   },
   "buttons": {
     "start": "הפעל Worker",
     "stop": "עצור Worker",
     "runOnce": "סנכרן עכשיו",
-    "clean": "נקה תהליכים תקועים"
+    "clean": "נקה תהליכים תקועים",
+    "openLog": "פתח לוג",
+    "openFolder": "תיקיית אג'יינט"
   },
   "startup": {
     "label": "הפעל אוטומטית כש-Windows עולה",
@@ -77,5 +79,5 @@
     "stuckTitle": "SpendWise Worker",
     "stuckBody": "סנכרון נתקע ובוטל אחרי {0} דקות."
   },
-  "footer": "SpendWise . מאת Hananel Sabag . בילד {0}"
+  "footer": "SpendWise . Hananel Sabag . build {0}"
 }
