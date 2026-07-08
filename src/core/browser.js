@@ -58,21 +58,43 @@ async function launch() {
 }
 
 /**
- * Close every tab but one (blanked). The scrapers run with
+ * Replace stale tabs with one clean about:blank tab. The scrapers run with
  * skipCloseBrowser:true, so their statement/login pages stay open in the
  * shared browser and pile up across jobs. Call this after each job (and once
  * at run start, to clear any tabs the persistent profile restored) so the user
  * never sees a stack of leftover about:blank tabs. Best-effort — never throws.
  */
-export async function closeExtraPages(browser) {
+export async function closeExtraPages(browser, reason = 'cleanup') {
   try {
     const pages = await browser.pages();
-    for (let i = 1; i < pages.length; i++) {
-      await pages[i].close().catch(() => {});
+    if (pages.length === 1 && pages[0].url() === 'about:blank') return;
+
+    const fresh = await browser.newPage().catch(() => null);
+    if (fresh) {
+      await fresh.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
     }
-    if (pages[0]) await pages[0].goto('about:blank').catch(() => {});
-  } catch {
-    /* best-effort cleanup */
+
+    let blanked = 0;
+    let closed = 0;
+    for (const page of pages) {
+      if (page.isClosed()) continue;
+      await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 })
+        .then(() => { blanked += 1; })
+        .catch(() => {});
+      await page.close({ runBeforeUnload: false })
+        .then(() => { closed += 1; })
+        .catch(() => {});
+    }
+
+    if (!fresh) {
+      const remaining = await browser.pages().catch(() => []);
+      if (remaining.length === 0) await browser.newPage().catch(() => {});
+      else await remaining[0].goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
+    }
+
+    if (closed > 0) log.info(`reset tabs (${reason}): blanked ${blanked}, closed ${closed}, clean tab ready`);
+  } catch (err) {
+    log.warn(`reset tabs (${reason}) skipped: ${err.message}`);
   }
 }
 

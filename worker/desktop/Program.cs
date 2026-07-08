@@ -13,6 +13,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Any(a => a.Equals("--smoke", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.Exit(WorkerSmoke.Run());
+        }
+
         using var mutex = new Mutex(true, @"Global\SpendWiseWorkerSingleton", out var createdNew);
         if (!createdNew)
         {
@@ -45,10 +50,65 @@ internal static class Program
     }
 }
 
+internal static class WorkerSmoke
+{
+    public static int Run()
+    {
+        try
+        {
+            var workerDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var agentDir = FindAgentDir(workerDir);
+            var agentJs = Path.Combine(agentDir, "src", "agent.js");
+            if (!File.Exists(agentJs)) throw new FileNotFoundException("agent.js was not found", agentJs);
+
+            var i18nDir = ResolveI18nDir(workerDir, agentDir);
+            foreach (var language in new[] { "en", "he" })
+            {
+                var i18n = I18n.Load(i18nDir, language);
+                if (i18n.T("app.title") == "app.title") throw new InvalidOperationException($"{language}.json is missing app.title");
+                if (i18n.T("buttons.start") == "buttons.start") throw new InvalidOperationException($"{language}.json is missing buttons.start");
+            }
+
+            _ = WorkerProfile.Load(workerDir);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, "worker-error.log");
+                File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] smoke failed: {ex}{Environment.NewLine}");
+            }
+            catch { }
+            return 1;
+        }
+    }
+
+    private static string FindAgentDir(string start)
+    {
+        var dir = new DirectoryInfo(start);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "src", "agent.js"))) return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    private static string ResolveI18nDir(string workerDir, string agentDir)
+    {
+        var local = Path.Combine(workerDir, "i18n");
+        if (Directory.Exists(local)) return local;
+        return Path.Combine(agentDir, "worker", "i18n");
+    }
+}
+
 internal sealed class WorkerForm : Form
 {
     private const int IntervalMinutes = 30;
     private const int MaxRunMinutes = 6;
+    private const int LogTailLines = 80;
     private readonly string _workerDir;
     private readonly string _agentDir;
     private readonly string _agentJs;
@@ -78,11 +138,11 @@ internal sealed class WorkerForm : Form
     private readonly Font _small;
     private readonly Font _pillFont;
 
-    private readonly Color _bg = Color.FromArgb(15, 23, 42);
-    private readonly Color _card = Color.FromArgb(30, 41, 59);
-    private readonly Color _card2 = Color.FromArgb(51, 65, 85);
-    private readonly Color _panel = Color.FromArgb(24, 32, 49);
-    private readonly Color _border = Color.FromArgb(71, 85, 105);
+    private readonly Color _bg = Color.FromArgb(18, 18, 20);
+    private readonly Color _card = Color.FromArgb(32, 34, 38);
+    private readonly Color _card2 = Color.FromArgb(48, 52, 60);
+    private readonly Color _panel = Color.FromArgb(25, 27, 31);
+    private readonly Color _border = Color.FromArgb(66, 72, 82);
     private readonly Color _text = Color.FromArgb(241, 245, 249);
     private readonly Color _muted = Color.FromArgb(148, 163, 184);
     private readonly Color _gray = Color.FromArgb(100, 116, 139);
@@ -146,6 +206,7 @@ internal sealed class WorkerForm : Form
     private readonly System.Windows.Forms.Timer _watchdogTimer = new();
     private readonly System.Windows.Forms.Timer _pulseTimer = new();
     private readonly System.Windows.Forms.Timer _refreshTimer = new();
+    private readonly ToolTip _tips = new() { AutomaticDelay = 250, AutoPopDelay = 8000, ReshowDelay = 100 };
 
     public WorkerForm(string[] args)
     {
@@ -168,6 +229,9 @@ internal sealed class WorkerForm : Form
         _stat = AppFont(21.0f, FontStyle.Bold, "Segoe UI Variable Display", "Segoe UI");
         _small = AppFont(8.75f, FontStyle.Regular, "Segoe UI Variable Text", "Segoe UI");
         _pillFont = AppFont(7.8f, FontStyle.Bold, "Segoe UI Variable Text", "Segoe UI");
+
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        DoubleBuffered = true;
 
         BuildUi();
         WireTimers();
@@ -268,7 +332,7 @@ internal sealed class WorkerForm : Form
         _nextRun = NewLabel("", _small, _muted, new Rectangle(410, 19, 150, 20), ContentAlignment.MiddleRight);
         _lastResult = NewLabel(T("result.notRunYet"), _regular, _muted, new Rectangle(44, 51, 500, 24), ContentAlignment.MiddleLeft);
         _lastRun = NewLabel("", _small, _gray, new Rectangle(44, 77, 500, 18), ContentAlignment.MiddleLeft);
-        _statusHint = NewLabel(T("status.hint"), _small, _gray, new Rectangle(44, 97, 500, 18), ContentAlignment.MiddleLeft);
+        _statusHint = NewLabel(T("status.hintStopped"), _small, _gray, new Rectangle(44, 97, 500, 18), ContentAlignment.MiddleLeft);
         statusCard.Controls.AddRange(new Control[] { _dot, _statusText, _nextRun, _lastResult, _lastRun, _statusHint });
 
         var checks = StatCard(new Rectangle(24, 374, 286, 78), _indigo, out _checksNumber, out _checksLabel);
@@ -515,8 +579,8 @@ internal sealed class WorkerForm : Form
         Text = T("app.title");
         _tray.Text = T("app.trayText");
         _headerTitle.Text = T("app.title");
-        _headerSubtitle.Text = T("header.subtitle");
-        _headerPill.Text = T("header.pill");
+        _headerSubtitle.Text = T(_profile.IsDefaultHost ? "header.defaultSubtitle" : "header.generalSubtitle");
+        _headerPill.Text = T(_profile.IsDefaultHost ? "header.defaultPill" : "header.generalPill");
         _languageButton.Text = T("meta.toggle");
         LayoutHeader(he);
         ApplyHostCopy(he);
@@ -565,6 +629,8 @@ internal sealed class WorkerForm : Form
         _startupCheck.Text = T("startup.label");
         _intervalLabel.Text = string.Format(T("startup.interval"), IntervalMinutes, MaxRunMinutes);
         _footer.Text = string.Format(T("footer"), _buildVersion);
+        UpdateStatusHint();
+        UpdateActionTooltips();
 
         _miOpen.Text = T("tray.open");
         _miRun.Text = T("buttons.runOnce");
@@ -725,7 +791,8 @@ internal sealed class WorkerForm : Form
         _checksNumber.Text = _state.TotalRuns.ToString(CultureInfo.InvariantCulture);
         _transactionsNumber.Text = GetSyncTotals().newTxns.ToString(CultureInfo.InvariantCulture);
         RefreshConfigPills();
-        if (!_busy) ParseLastResult();
+        if (_busy) RefreshRunProgress();
+        else ParseLastResult();
         _startupCheck.Checked = TestStartup();
         _footer.Text = string.Format(T("footer"), _buildVersion);
     }
@@ -777,6 +844,8 @@ internal sealed class WorkerForm : Form
     {
         _runButton.Enabled = !_busy;
         _runButton.Cursor = _busy ? Cursors.Default : Cursors.Hand;
+        UpdateStatusHint();
+        UpdateActionTooltips();
     }
 
     private ConfigSummary GetConfigSummary()
@@ -825,56 +894,199 @@ internal sealed class WorkerForm : Form
         _statusKey = key;
         _statusText.Text = T(key);
         _dot.ForeColor = color;
+        UpdateStatusHint();
+        UpdateActionTooltips();
+    }
+
+    private void SetRestingStatus()
+    {
+        SetStatus(_running ? "status.running" : "status.stopped", _running ? _green : _gray);
+    }
+
+    private void UpdateStatusHint()
+    {
+        if (_statusHint is null) return;
+        if (_busy)
+        {
+            _statusHint.Text = T("status.hintBusy");
+            return;
+        }
+
+        _statusHint.Text = _running ? T("status.hintRunning") : T("status.hintStopped");
+    }
+
+    private void UpdateActionTooltips()
+    {
+        if (_mainButton is null) return;
+        _tips.SetToolTip(_mainButton, T(_running ? "tips.stopService" : "tips.startService"));
+        _tips.SetToolTip(_runButton, T("tips.checkNow"));
+        _tips.SetToolTip(_cleanButton, T("tips.clean"));
+        _tips.SetToolTip(_logButton, T("tips.openLog"));
+        _tips.SetToolTip(_folderButton, T("tips.openFolder"));
     }
 
     private void ParseLastResult()
     {
-        if (!File.Exists(_logFile))
-        {
-            _lastResult.Text = T("result.notRunYet");
-            _lastResult.ForeColor = _muted;
-            return;
-        }
+        ApplyLogSnapshot(ReadLogSnapshot(), busy: false);
+    }
 
-        string[] tail;
-        try { tail = File.ReadLines(_logFile).TakeLast(40).ToArray(); }
-        catch
+    private void RefreshRunProgress()
+    {
+        var snapshot = ReadLogSnapshot();
+        if (snapshot.Kind is LogEventKind.Claimed or LogEventKind.Scraping or LogEventKind.Warmup or LogEventKind.Pausing or LogEventKind.Done)
         {
-            _lastResult.Text = T("result.notRunYet");
-            _lastResult.ForeColor = _muted;
-            return;
+            SetStatus("status.syncing", _blue);
         }
-
-        var done = tail.LastOrDefault(l => Regex.IsMatch(l, @"DONE .* \d+ new, \d+ skipped"));
-        var none = tail.LastOrDefault(l => l.Contains("no pending jobs", StringComparison.OrdinalIgnoreCase));
-        var fail = tail.LastOrDefault(l => l.Contains("FAILED", StringComparison.OrdinalIgnoreCase) ||
-                                           l.Contains("FATAL", StringComparison.OrdinalIgnoreCase));
-        if (done is not null)
+        else if (snapshot.Kind is LogEventKind.Failure or LogEventKind.Timeout)
         {
-            var match = Regex.Match(done, @"(\d+) new, (\d+) skipped");
-            if (match.Success)
-            {
-                _lastResult.Text = string.Format(T("result.lastSync"), match.Groups[1].Value, match.Groups[2].Value);
-                _lastResult.ForeColor = _green;
-                return;
-            }
-        }
-
-        if (fail is not null)
-        {
-            _lastResult.Text = T("result.failure");
-            _lastResult.ForeColor = _red;
-        }
-        else if (none is not null)
-        {
-            _lastResult.Text = T("result.upToDate");
-            _lastResult.ForeColor = _muted;
+            SetStatus("status.syncing", _amber);
         }
         else
         {
-            _lastResult.Text = T("result.notRunYet");
-            _lastResult.ForeColor = _muted;
+            SetStatus("status.checking", _blue);
         }
+
+        ApplyLogSnapshot(snapshot, busy: true);
+    }
+
+    private LogSnapshot ReadLogSnapshot()
+    {
+        if (!File.Exists(_logFile)) return new LogSnapshot(LogEventKind.None);
+
+        string[] tail;
+        try { tail = File.ReadLines(_logFile).TakeLast(LogTailLines).ToArray(); }
+        catch { return new LogSnapshot(LogEventKind.None); }
+
+        foreach (var line in tail.Reverse())
+        {
+            var cleanup = Regex.Match(line, @"WORKER cleanup:\s*(.+)$");
+            if (cleanup.Success) return new LogSnapshot(LogEventKind.Cleanup, Message: cleanup.Groups[1].Value.Trim());
+
+            if (line.Contains("watchdog cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LogSnapshot(LogEventKind.Timeout);
+            }
+
+            if (line.Contains("another instance is running", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LogSnapshot(LogEventKind.Locked);
+            }
+
+            if (line.Contains("duplicate sync request", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LogSnapshot(LogEventKind.Duplicate);
+            }
+
+            if (line.Contains("FAILED", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("FATAL", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LogSnapshot(LogEventKind.Failure);
+            }
+
+            var done = Regex.Match(line, @"DONE .*?(\d+) new, (\d+) skipped");
+            if (done.Success)
+            {
+                return new LogSnapshot(
+                    LogEventKind.Done,
+                    NewCount: int.Parse(done.Groups[1].Value, CultureInfo.InvariantCulture),
+                    SkippedCount: int.Parse(done.Groups[2].Value, CultureInfo.InvariantCulture));
+            }
+
+            if (line.Contains("no pending jobs", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LogSnapshot(LogEventKind.NonePending);
+            }
+
+            var claimed = Regex.Match(line, @"claimed (\d+) job", RegexOptions.IgnoreCase);
+            if (claimed.Success)
+            {
+                return new LogSnapshot(
+                    LogEventKind.Claimed,
+                    Count: int.Parse(claimed.Groups[1].Value, CultureInfo.InvariantCulture));
+            }
+
+            var scraping = Regex.Match(line, @"\[job:(\d+)\]\s+scraping\s+([a-z0-9_-]+)", RegexOptions.IgnoreCase);
+            if (scraping.Success)
+            {
+                return new LogSnapshot(LogEventKind.Scraping, Source: scraping.Groups[2].Value, JobId: scraping.Groups[1].Value);
+            }
+
+            var warmup = Regex.Match(line, @"\[([a-z0-9_-]+)\]\s+warming up Cloudflare", RegexOptions.IgnoreCase);
+            if (warmup.Success)
+            {
+                return new LogSnapshot(LogEventKind.Warmup, Source: warmup.Groups[1].Value);
+            }
+
+            var pausing = Regex.Match(line, @"pausing (\d+)s before next job", RegexOptions.IgnoreCase);
+            if (pausing.Success)
+            {
+                return new LogSnapshot(
+                    LogEventKind.Pausing,
+                    Count: int.Parse(pausing.Groups[1].Value, CultureInfo.InvariantCulture));
+            }
+        }
+
+        return new LogSnapshot(LogEventKind.None);
+    }
+
+    private void ApplyLogSnapshot(LogSnapshot snapshot, bool busy)
+    {
+        switch (snapshot.Kind)
+        {
+            case LogEventKind.Done:
+                _lastResult.Text = string.Format(T("result.lastSync"), snapshot.NewCount, snapshot.SkippedCount);
+                _lastResult.ForeColor = _green;
+                return;
+            case LogEventKind.NonePending:
+                _lastResult.Text = T("result.upToDate");
+                _lastResult.ForeColor = _muted;
+                return;
+            case LogEventKind.Failure:
+                _lastResult.Text = T("result.failure");
+                _lastResult.ForeColor = _red;
+                return;
+            case LogEventKind.Cleanup:
+                _lastResult.Text = string.Format(T("result.cleanup"), snapshot.Message);
+                _lastResult.ForeColor = _amber;
+                return;
+            case LogEventKind.Timeout:
+                _lastResult.Text = T("result.timeoutShort");
+                _lastResult.ForeColor = _red;
+                return;
+            case LogEventKind.Locked:
+                _lastResult.Text = T("result.locked");
+                _lastResult.ForeColor = _amber;
+                return;
+            case LogEventKind.Duplicate:
+                _lastResult.Text = T("result.alreadyRunning");
+                _lastResult.ForeColor = _amber;
+                return;
+            case LogEventKind.Claimed:
+                _lastResult.Text = string.Format(T("result.claimed"), snapshot.Count);
+                _lastResult.ForeColor = _blue;
+                return;
+            case LogEventKind.Scraping:
+                _lastResult.Text = string.Format(T("result.scraping"), PrettySource(snapshot.Source));
+                _lastResult.ForeColor = _blue;
+                return;
+            case LogEventKind.Warmup:
+                _lastResult.Text = string.Format(T("result.openingBrowser"), PrettySource(snapshot.Source));
+                _lastResult.ForeColor = _blue;
+                return;
+            case LogEventKind.Pausing:
+                _lastResult.Text = string.Format(T("result.pausing"), snapshot.Count);
+                _lastResult.ForeColor = _muted;
+                return;
+            default:
+                _lastResult.Text = busy ? T("result.checking") : T("result.notRunYet");
+                _lastResult.ForeColor = _muted;
+                return;
+        }
+    }
+
+    private static string PrettySource(string source)
+    {
+        return string.IsNullOrWhiteSpace(source) ? "" : source.Replace('_', ' ');
     }
 
     private (int newTxns, int syncs) GetSyncTotals()
@@ -900,7 +1112,11 @@ internal sealed class WorkerForm : Form
 
     private void UpdateNextRun()
     {
-        if (_running && _nextRunAt is not null)
+        if (_busy)
+        {
+            _nextRun.Text = T("status.now");
+        }
+        else if (_running && _nextRunAt is not null)
         {
             var mins = Math.Max(0, (int)Math.Round((_nextRunAt.Value - DateTime.Now).TotalMinutes));
             _nextRun.Text = string.Format(T("status.nextRun"), mins);
@@ -917,6 +1133,7 @@ internal sealed class WorkerForm : Form
         if ((DateTime.Now - _runStartedAt.Value).TotalMinutes < MaxRunMinutes) return;
 
         var killed = KillCurrentTree();
+        RemoveAgentLock();
         AppendWorkerLog($"watchdog cancelled a stuck sync after {MaxRunMinutes} minutes; killed={killed}");
         _busy = false;
         _currentProc = null;
@@ -925,7 +1142,7 @@ internal sealed class WorkerForm : Form
         _lastResult.Text = string.Format(T("result.timeout"), MaxRunMinutes, killed);
         _lastResult.ForeColor = _red;
         _lastRun.Text = string.Format(T("result.lastRun"), DateTime.Now.ToString("dd/MM HH:mm", CultureInfo.InvariantCulture));
-        SetStatus(_running ? "status.running" : "status.idle", _running ? _green : _gray);
+        SetRestingStatus();
         _tray.ShowBalloonTip(4000, T("tray.stuckTitle"), string.Format(T("tray.stuckBody"), MaxRunMinutes), ToolTipIcon.Warning);
     }
 
@@ -963,7 +1180,7 @@ internal sealed class WorkerForm : Form
         if (!File.Exists(_agentJs))
         {
             AppendWorkerLog("agent entry file was not found: " + _agentJs);
-            SetStatus("status.idle", _red);
+            SetStatus(_running ? "status.running" : "status.stopped", _red);
             _lastResult.Text = T("result.launchFailed");
             _lastResult.ForeColor = _red;
             return;
@@ -972,7 +1189,9 @@ internal sealed class WorkerForm : Form
         _busy = true;
         UpdateBusyState();
         _runStartedAt = DateTime.Now;
-        SetStatus("status.syncing", _blue);
+        SetStatus("status.checking", _blue);
+        _lastResult.Text = T("result.checking");
+        _lastResult.ForeColor = _blue;
         _lastRun.Text = string.Format(T("result.started"), DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
 
         try
@@ -996,7 +1215,7 @@ internal sealed class WorkerForm : Form
         catch (Exception ex)
         {
             AppendWorkerLog("failed to start agent: " + ex);
-            SetStatus(ex is Win32Exception ? "status.nodeMissing" : "status.idle", _red);
+            SetStatus(ex is Win32Exception ? "status.nodeMissing" : (_running ? "status.running" : "status.stopped"), _red);
             _lastResult.Text = ex is Win32Exception ? T("result.installNode") : T("result.launchFailed");
             _lastResult.ForeColor = _red;
             _busy = false;
@@ -1033,7 +1252,7 @@ internal sealed class WorkerForm : Form
         }
         _transactionsNumber.Text = GetSyncTotals().newTxns.ToString(CultureInfo.InvariantCulture);
         _lastRun.Text = string.Format(T("result.lastContact"), DateTime.Now.ToString("HH:mm", CultureInfo.InvariantCulture), _sessionRuns);
-        SetStatus(_running ? "status.running" : "status.idle", _running ? _green : _gray);
+        SetRestingStatus();
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
@@ -1058,7 +1277,16 @@ internal sealed class WorkerForm : Form
         UpdateNextRun();
         _mainButton.Text = T("buttons.start");
         _mainButton.BackColor = _indigo;
-        SetStatus("status.stopped", _gray);
+        if (_busy)
+        {
+            _lastResult.Text = T("result.stoppedAfterCurrent");
+            _lastResult.ForeColor = _amber;
+            SetStatus("status.syncing", _blue);
+        }
+        else
+        {
+            SetStatus("status.stopped", _gray);
+        }
     }
 
     private void CleanStuckProcesses()
@@ -1077,20 +1305,12 @@ internal sealed class WorkerForm : Form
         var orphaned = KillOrphanedAgentProcesses();
         if (orphaned > 0) report.Add(string.Format(T("cleanup.orphans"), orphaned));
 
-        if (File.Exists(_lockFile))
-        {
-            try
-            {
-                File.Delete(_lockFile);
-                report.Add(T("cleanup.staleLock"));
-            }
-            catch { }
-        }
+        if (RemoveAgentLock()) report.Add(T("cleanup.staleLock"));
 
         var message = report.Count == 0 ? T("cleanup.none") : string.Format(T("cleanup.cleaned"), string.Join(", ", report));
         _lastResult.Text = message;
         _lastResult.ForeColor = _amber;
-        SetStatus(_running ? "status.running" : "status.idle", _running ? _green : _gray);
+        SetRestingStatus();
         _cleanButton.Enabled = true;
         AppendWorkerLog("cleanup: " + message);
         try { _tray.ShowBalloonTip(3000, T("cleanup.title"), message, ToolTipIcon.Info); } catch { }
@@ -1143,6 +1363,20 @@ internal sealed class WorkerForm : Form
         }
 
         return 0;
+    }
+
+    private bool RemoveAgentLock()
+    {
+        if (!File.Exists(_lockFile)) return false;
+        try
+        {
+            File.Delete(_lockFile);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private int KillOrphanedAgentProcesses()
@@ -1220,12 +1454,38 @@ internal sealed class WorkerForm : Form
             return;
         }
 
-        KillCurrentTree();
+        var killed = KillCurrentTree();
+        if (killed > 0) RemoveAgentLock();
         _tray.Dispose();
     }
 }
 
 internal sealed record ConfigSummary(string ApiLabel, Color ApiColor, string KeyLabel, Color KeyColor);
+
+internal enum LogEventKind
+{
+    None,
+    Done,
+    NonePending,
+    Failure,
+    Cleanup,
+    Timeout,
+    Locked,
+    Duplicate,
+    Claimed,
+    Scraping,
+    Warmup,
+    Pausing
+}
+
+internal sealed record LogSnapshot(
+    LogEventKind Kind,
+    string Message = "",
+    int Count = 0,
+    int NewCount = 0,
+    int SkippedCount = 0,
+    string Source = "",
+    string JobId = "");
 
 internal sealed class WorkerProfile
 {

@@ -8,80 +8,105 @@
     "trayText": "SpendWise Worker"
   },
   "header": {
-    "subtitle": "מרכז סנכרון בנקים ואשראי",
-    "pill": "מקומי ומאובטח"
+    "subtitle": "סוכן סנכרון מקומי",
+    "pill": "מקומי ומאובטח",
+    "generalSubtitle": "סוכן סנכרון מקומי",
+    "defaultSubtitle": "שרת הסנכרון הרשמי",
+    "generalPill": "מקומי ומאובטח",
+    "defaultPill": "Default Host"
   },
   "host": {
     "generalTitle": "מרכז הבקרה המקומי",
-    "generalBody": "המחשב הזה מריץ רק את הסנכרונים שלך. המפתח נשאר כאן, והשרת שולח בקשות עבודה מוצפנות בלבד.",
-    "generalNote": "זה הבסיס לגרסה שבה כל משתמש יוכל לחבר מחשב אישי משלו.",
+    "generalBody": "המחשב הזה בודק ומריץ רק את עבודות הסנכרון שלך. המפתח הפרטי נשאר כאן.",
+    "generalNote": "אפשר להשאיר את השירות פעיל ברקע או לבדוק ידנית כשצריך.",
     "generalBadge": "Worker אישי",
     "defaultTitle": "שרת הסנכרון הרשמי",
-    "defaultBody": "שלום {0}, אצלך רצות משימות ברירת המחדל של SpendWise. כשהמחשב פתוח ומחובר, הסנכרונים יכולים להמשיך לעבוד מכאן.",
-    "defaultNote": "אחריות שלך להשאיר את המחשב, האינטרנט והאפליקציה זמינים בזמן עבודה.",
-    "defaultBadge": "Hananel Host"
+    "defaultBody": "שלום {0}, המחשב הזה מריץ את עבודות ברירת המחדל של SpendWise.",
+    "defaultNote": "כשהוא פתוח ומחובר, התור יכול להמשיך לעבוד מכאן.",
+    "defaultBadge": "Default Host"
   },
   "config": {
-    "apiNotSet": "לא הוגדר שרת",
-    "cloudApi": "מחובר לשרת SpendWise",
-    "localApi": "מחובר לסביבת פיתוח",
-    "unsupportedApi": "שרת לא מוכר",
+    "apiNotSet": "שרת API חסר",
+    "cloudApi": "ענן SpendWise",
+    "localApi": "סביבת פיתוח",
+    "unsupportedApi": "שרת לא נתמך",
     "keyReady": "מפתח מקומי פעיל",
     "keyMissing": "חסר מפתח מקומי"
   },
   "status": {
-    "stopped": "ממתין להפעלה",
-    "running": "מוכן לסנכרון",
-    "idle": "ממתין",
-    "syncing": "מסנכרן...",
+    "stopped": "השירות כבוי",
+    "running": "השירות פעיל",
+    "idle": "מוכן",
+    "checking": "בודק עבודות",
+    "syncing": "מבצע סנכרון",
     "nodeMissing": "Node.js לא נמצא",
-    "nextRun": "בדיקה עוד {0} דק'",
-    "hint": "כניסה לבנק מתבצעת רק כשיש משימת סנכרון אמיתית."
+    "nextRun": "בדיקה בעוד {0} דק'",
+    "now": "עובד עכשיו",
+    "hintStopped": "הפעל שירות כדי לבדוק כל 30 דקות.",
+    "hintRunning": "השירות בודק את התור אוטומטית. אפשר לבדוק גם עכשיו.",
+    "hintBusy": "דפדפן עשוי להיפתח. לא לסגור בזמן סנכרון."
   },
   "result": {
-    "notRunYet": "עוד לא רץ",
+    "notRunYet": "עדיין לא בוצעה בדיקה",
     "lastSync": "סונכרן: {0} חדשות, {1} מוכרות",
     "failure": "הסנכרון האחרון נכשל - פרטים בלוג",
-    "alreadyRunning": "סנכרון כבר רץ - בקשה כפולה נדחתה",
-    "launchFailed": "לא הצלחתי להפעיל את הסוכן - פרטים בלוג",
-    "upToDate": "אין משימות כרגע - הכל רגוע",
-    "timeout": "בוטל אחרי {0} דק' ({1} תהליכים נסגרו)",
+    "alreadyRunning": "כבר יש בדיקה פעילה",
+    "launchFailed": "לא הצלחתי להפעיל את ה-Agent",
+    "upToDate": "אין עבודות כרגע",
+    "timeout": "בוטל אחרי {0} דק' ({1} תהליך נסגר)",
+    "timeoutShort": "ריצה תקועה בוטלה",
     "lastRun": "ריצה אחרונה {0}",
     "started": "התחיל {0}",
     "installNode": "התקן Node.js ונסה שוב",
-    "lastContact": "בדיקה אחרונה {0} · {1} בדיקות מאז הפתיחה"
+    "lastContact": "בדיקה אחרונה {0} · {1} בדיקות בסשן",
+    "checking": "בודק אם יש עבודות בתור...",
+    "claimed": "נמצאו {0} עבודות",
+    "scraping": "מסנכרן את {0}",
+    "openingBrowser": "פותח דפדפן עבור {0}",
+    "pausing": "ממתין {0} שניות לפני העבודה הבאה",
+    "cleanup": "ניקוי: {0}",
+    "locked": "ריצה אחרת כבר פעילה",
+    "stoppedAfterCurrent": "השירות נעצר; הסנכרון הנוכחי ממשיך."
   },
   "stats": {
-    "serverChecks": "בדיקות מול השרת",
+    "serverChecks": "בדיקות תור",
     "transactionsSynced": "עסקאות שנקלטו"
   },
   "model": {
-    "title": "איך הסנכרון עובד",
-    "queueTitle": "משימה מתקבלת",
-    "queueBody": "SpendWise שולח בקשת סנכרון מוצפנת למחשב הזה.",
-    "browserTitle": "הדפדפן נפתח כאן",
-    "browserBody": "הכניסה לבנק מתבצעת מקומית, לא מתוך שרת מרוחק.",
-    "reportTitle": "תוצאה חוזרת לשרת",
-    "reportBody": "רק נתוני הסנכרון נשלחים חזרה בצורה מאובטחת.",
+    "title": "מה רץ כאן",
+    "queueTitle": "בודק תור",
+    "queueBody": "SpendWise שולחת בקשת סנכרון מוצפנת.",
+    "browserTitle": "פותח דפדפן מקומי",
+    "browserBody": "הכניסה לבנק קורית רק במחשב הזה.",
+    "reportTitle": "מחזיר תוצאה",
+    "reportBody": "רק תוצאת הסנכרון נשלחת חזרה.",
     "banksCards": "בנקים + אשראי",
-    "frequency": "~2 ביום"
+    "frequency": "כל 30 דק'"
   },
   "buttons": {
-    "start": "הפעל סנכרון",
-    "stop": "עצור סנכרון",
-    "runOnce": "סנכרן עכשיו",
+    "start": "הפעל שירות",
+    "stop": "עצור שירות",
+    "runOnce": "בדוק עכשיו",
     "clean": "נקה תהליכים תקועים",
     "openLog": "פתח לוג",
-    "openFolder": "תיקיית אג'יינט"
+    "openFolder": "תיקיית Agent"
+  },
+  "tips": {
+    "startService": "הפעל בדיקת תור אוטומטית כל 30 דקות.",
+    "stopService": "עצור בדיקות אוטומטיות עתידיות. סנכרון פעיל לא נסגר.",
+    "checkNow": "בצע בדיקת תור חד-פעמית עכשיו. אם אין עבודות, לא ייפתח סנכרון.",
+    "clean": "סגור תהליכי Agent או דפדפן תקועים והסר נעילה ישנה.",
+    "openLog": "פתח את agent.log.",
+    "openFolder": "פתח את תיקיית ה-Agent."
   },
   "startup": {
     "label": "הפעל אוטומטית עם Windows",
-    "interval": "בודק משימות כל {0} דקות. סנכרון שנתקע נסגר אוטומטית אחרי {1} דקות."
+    "interval": "בודק עבודות כל {0} דקות. ריצה תקועה תבוטל אחרי {1} דקות."
   },
   "cleanup": {
-    "none": "אין מה לנקות - הכל נקי.",
+    "none": "אין מה לנקות.",
     "cleaned": "נוקה: {0}.",
-    "activeRun": "{0} תהליכים מהריצה הפעילה",
+    "activeRun": "{0} תהליך מריצה פעילה",
     "orphans": "{0} תהליכים יתומים",
     "staleLock": "קובץ נעילה ישן",
     "title": "ניקוי תהליכים תקועים"
@@ -93,5 +118,5 @@
     "stuckTitle": "SpendWise Worker",
     "stuckBody": "סנכרון נתקע ובוטל אחרי {0} דקות."
   },
-  "footer": "SpendWise . Hananel Sabag . build {0}"
+  "footer": "SpendWise · Hananel Sabag · build {0}"
 }

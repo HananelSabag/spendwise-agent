@@ -98,7 +98,7 @@ async function main() {
 
     await withBrowser(async (browser) => {
       // Clear any tabs the persistent profile restored from a previous run.
-      await closeExtraPages(browser);
+      await closeExtraPages(browser, 'run start');
 
       let first = true;
       for (const job of runnable) {
@@ -122,7 +122,7 @@ async function main() {
             .catch((e) => log.error(`report failed — ${e.message}`));
         } finally {
           // Close the scraper's leftover pages so tabs don't pile up job-to-job.
-          await closeExtraPages(browser);
+          await closeExtraPages(browser, `after job ${job.id}`);
         }
       }
     });
