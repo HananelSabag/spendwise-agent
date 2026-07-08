@@ -13,12 +13,12 @@
   },
   "host": {
     "generalTitle": "Local control center",
-    "generalBody": "This computer runs only your own sync jobs. Your private key stays local; SpendWise only queues encrypted work.",
-    "generalNote": "In the next flow, each user will be able to pair their own machine.",
+    "generalBody": "This computer runs only your own sync jobs. The private key stays here; the server only sends encrypted work requests.",
+    "generalNote": "This is the base for the future flow where each user pairs their own machine.",
     "generalBadge": "Personal Worker",
-    "defaultTitle": "Official SpendWise host",
-    "defaultBody": "Hi {0}, this machine runs the default SpendWise sync jobs. Keep it online when you want queued work to continue from here.",
-    "defaultNote": "Your responsibility: keep this computer and its network available when sync is needed.",
+    "defaultTitle": "Official sync host",
+    "defaultBody": "Hi {0}, the default SpendWise sync jobs run on this computer. When it is open and online, queued work can continue from here.",
+    "defaultNote": "Your job is to keep the computer, network, and app available while work is running.",
     "defaultBadge": "Hananel Host"
   },
   "config": {
@@ -42,6 +42,8 @@
     "notRunYet": "Not run yet",
     "lastSync": "Synced: {0} new, {1} known",
     "failure": "Last run had a failure - see agent.log",
+    "alreadyRunning": "A sync is already running - duplicate request ignored",
+    "launchFailed": "Could not start the agent - see the log",
     "upToDate": "Up to date - no work was waiting",
     "timeout": "Timed out after {0}m - cancelled ({1} process(es) stopped)",
     "lastRun": "Last run {0}",
@@ -55,10 +57,12 @@
   },
   "model": {
     "title": "Local sync model",
-    "runsTitle": "Runs on this computer",
-    "runsBody": "The browser session opens here, not on SpendWise.",
-    "encryptedTitle": "Encrypted handoff",
-    "encryptedBody": "The server queues work; the private key stays local.",
+    "queueTitle": "Job is received",
+    "queueBody": "SpendWise sends an encrypted sync request to this machine.",
+    "browserTitle": "Browser opens here",
+    "browserBody": "Bank login happens locally, not inside a remote server.",
+    "reportTitle": "Result returns",
+    "reportBody": "Only the sync result is sent back securely.",
     "banksCards": "Banks + cards",
     "frequency": "~2/day"
   },
