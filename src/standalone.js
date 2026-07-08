@@ -4,7 +4,7 @@
  * Scrapes banks with credentials from the local .env and POSTs to the
  * legacy /bank-sync endpoint (X-API-Key). The production path is agent.js.
  *
- * Dev shortcut: OFFLINE=1 npm run standalone
+ * Dev shortcut: OFFLINE=1 npm run standalone (requires an explicit DEBUG_SAVE_SCRAPES=true cache)
  *   replays the last saved scrape from scraped-data/ — no browser, no bank.
  */
 

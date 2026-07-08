@@ -21,8 +21,8 @@
     "generalNote": "Leave the service on for background checks, or check manually any time.",
     "generalBadge": "Personal Worker",
     "defaultTitle": "Official sync host",
-    "defaultBody": "Hi {0}, this computer runs SpendWise default sync jobs.",
-    "defaultNote": "Keep this computer online so queued work can continue from here.",
+    "defaultBody": "Hi {0}, the Windows Worker runs here and takes care of SpendWise syncs.",
+    "defaultNote": "When this computer is online, it checks sync requests and runs the ones allowed now.",
     "defaultBadge": "Default Host"
   },
   "config": {
@@ -34,17 +34,17 @@
     "keyMissing": "Private key missing"
   },
   "status": {
-    "stopped": "Service off",
-    "running": "Service active",
+    "stopped": "Worker off",
+    "running": "Worker running",
     "idle": "Ready",
-    "checking": "Checking jobs",
+    "checking": "Checking requests",
     "syncing": "Syncing now",
     "nodeMissing": "Node.js not found",
     "nextRun": "next check in {0}m",
     "now": "working now",
-    "hintStopped": "Start the service to check every 30 minutes.",
-    "hintRunning": "The service checks the queue automatically. You can also check now.",
-    "hintBusy": "A browser may open. Keep it open while sync is running."
+    "hintStopped": "Start the Worker so it checks SpendWise every 30 minutes.",
+    "hintRunning": "The Worker is running in the background and checks sync requests every 30 minutes.",
+    "hintBusy": "The Worker is working now. If a browser opens, keep it open."
   },
   "result": {
     "notRunYet": "No check has run yet",
@@ -52,57 +52,57 @@
     "failure": "Last sync failed - see the log",
     "alreadyRunning": "A check is already running",
     "launchFailed": "Could not start the agent",
-    "upToDate": "No jobs right now",
+    "upToDate": "No sync requests right now",
     "timeout": "Cancelled after {0}m ({1} process stopped)",
     "timeoutShort": "A stuck run was cancelled",
     "lastRun": "Last run {0}",
     "started": "Started {0}",
     "installNode": "Install Node.js, then try again",
     "lastContact": "Last check {0} · {1} checks this session",
-    "checking": "Checking the queue...",
-    "claimed": "Found {0} job(s) to check",
+    "checking": "Checking whether SpendWise sent requests...",
+    "claimed": "Received {0} sync request(s)",
     "scraping": "Syncing {0}",
     "openingBrowser": "Opening browser for {0}",
     "pausing": "Waiting {0}s before the next job",
     "cleanup": "Cleanup: {0}",
     "locked": "Another agent run is already active",
-    "cooldown": "No sync now - {0} job(s) are cooling down locally",
+    "cooldown": "Skipped {0} request(s) - synced recently",
     "stoppedAfterCurrent": "Service stopped; the current sync will continue."
   },
   "stats": {
-    "serverChecks": "Queue checks",
+    "serverChecks": "Checks completed",
     "transactionsSynced": "Transactions added"
   },
   "model": {
-    "title": "What runs here",
-    "queueTitle": "Checks the queue",
-    "queueBody": "SpendWise sends an encrypted sync request.",
-    "browserTitle": "Opens a local browser",
-    "browserBody": "Bank login happens only on this computer.",
-    "reportTitle": "Reports the result",
-    "reportBody": "Only sync results are sent back to SpendWise.",
+    "title": "What actually happens",
+    "queueTitle": "The Worker asks SpendWise",
+    "queueBody": "Are there new sync requests?",
+    "browserTitle": "If yes, it syncs",
+    "browserBody": "The browser opens here and bank login stays local.",
+    "reportTitle": "If no, it waits",
+    "reportBody": "No accounts or transactions are saved on disk.",
     "banksCards": "Banks + cards",
     "frequency": "Every 30m"
   },
   "buttons": {
-    "start": "Start service",
-    "stop": "Stop service",
-    "runOnce": "Check queue now",
+    "start": "Start Windows Worker",
+    "stop": "Stop Windows Worker",
+    "runOnce": "Check & sync now",
     "clean": "Clean stuck processes",
     "openLog": "Open log",
     "openFolder": "Agent folder"
   },
   "tips": {
-    "startService": "Start automatic queue checks every 30 minutes.",
+    "startService": "Start the Worker that checks SpendWise every 30 minutes.",
     "stopService": "Stop future automatic checks. An active sync is not killed.",
-    "checkNow": "Check whether any queued jobs may run now. Local cooldown jobs will not open a browser.",
+    "checkNow": "One-time check: if a sync request is allowed to run, the Worker syncs now.",
     "clean": "Kill stuck agent or browser processes and remove a stale lock.",
     "openLog": "Open agent.log.",
     "openFolder": "Open the agent folder."
   },
   "startup": {
     "label": "Launch automatically with Windows",
-    "interval": "Checks for jobs every {0} minutes. A stuck run is cancelled after {1} minutes."
+    "interval": "The Worker checks SpendWise every {0} minutes. A stuck run is cancelled after {1} minutes."
   },
   "cleanup": {
     "none": "Nothing to clean.",

@@ -88,7 +88,7 @@ async function main() {
     let cooldownDeclined = 0;
     for (const job of jobs) {
       if (inCooldown(job.connection_id)) {
-        log.warn(`job ${job.id} (conn ${job.connection_id}) inside ${COOLDOWN_HOURS}h cooldown — declining`);
+        log.warn(`sync request ${job.id} (conn ${job.connection_id}) too soon since last successful sync — skipping`);
         await reportFailure(job.id, `Agent cooldown: scraped less than ${COOLDOWN_HOURS}h ago`, { transient: true })
           .catch((e) => log.error(`report failed — ${e.message}`));
         cooldownDeclined++;
@@ -97,10 +97,10 @@ async function main() {
       }
     }
     if (cooldownDeclined > 0) {
-      log.info(`cooldown declined ${cooldownDeclined} job(s); ${runnable.length} runnable`);
+      log.info(`skipped ${cooldownDeclined} sync request(s): synced recently; ${runnable.length} can run now`);
     }
     if (runnable.length === 0) {
-      log.info(`no runnable jobs after cooldown (${cooldownDeclined} declined)`);
+      log.info(`no sync requests can run now (${cooldownDeclined} skipped as too soon)`);
       return;
     }
 

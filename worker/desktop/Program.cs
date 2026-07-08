@@ -969,7 +969,7 @@ internal sealed class WorkerForm : Form
 
         foreach (var line in tail.Reverse())
         {
-            var noRunnable = Regex.Match(line, @"no runnable jobs after cooldown \((\d+) declined\)", RegexOptions.IgnoreCase);
+            var noRunnable = Regex.Match(line, @"no (?:runnable jobs after cooldown|sync requests can run now) \((\d+) (?:declined|skipped)", RegexOptions.IgnoreCase);
             if (noRunnable.Success)
             {
                 return new LogSnapshot(
@@ -1015,7 +1015,7 @@ internal sealed class WorkerForm : Form
                 return new LogSnapshot(LogEventKind.NonePending);
             }
 
-            var claimed = Regex.Match(line, @"claimed (\d+) job", RegexOptions.IgnoreCase);
+            var claimed = Regex.Match(line, @"(?:claimed|received) (\d+) (?:job|sync request)", RegexOptions.IgnoreCase);
             if (claimed.Success)
             {
                 return new LogSnapshot(
@@ -1112,7 +1112,8 @@ internal sealed class WorkerForm : Form
         for (var i = tail.Length - 1; i >= 0; i--)
         {
             var line = tail[i];
-            if (line.Contains("inside 3h cooldown", StringComparison.OrdinalIgnoreCase))
+            if (line.Contains("inside 3h cooldown", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("too soon since last successful sync", StringComparison.OrdinalIgnoreCase))
             {
                 count++;
                 continue;
@@ -1121,7 +1122,8 @@ internal sealed class WorkerForm : Form
             if (count > 0)
             {
                 if (Regex.IsMatch(line, @"claimed \d+ job", RegexOptions.IgnoreCase)) return count;
-                if (line.Contains("cooldown declined", StringComparison.OrdinalIgnoreCase)) continue;
+                if (line.Contains("cooldown declined", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("synced recently", StringComparison.OrdinalIgnoreCase)) continue;
                 return 0;
             }
 

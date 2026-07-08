@@ -46,7 +46,7 @@ async function request(method, pathName, body) {
 /** Atomically claim up to `limit` pending sync jobs. */
 export async function claimJobs(limit = 5) {
   const { jobs = [] } = await request('POST', '/bank-agent/jobs/claim', { limit });
-  if (jobs.length > 0) log.info(`claimed ${jobs.length} job(s)`);
+  if (jobs.length > 0) log.info(`received ${jobs.length} sync request(s)`);
   return jobs;
 }
 

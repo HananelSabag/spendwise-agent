@@ -21,8 +21,8 @@
     "generalNote": "אפשר להשאיר את השירות פעיל ברקע או לבדוק ידנית כשצריך.",
     "generalBadge": "Worker אישי",
     "defaultTitle": "שרת הסנכרון הרשמי",
-    "defaultBody": "שלום {0}, המחשב הזה מריץ את עבודות ברירת המחדל של SpendWise.",
-    "defaultNote": "כשהוא פתוח ומחובר, התור יכול להמשיך לעבוד מכאן.",
+    "defaultBody": "שלום {0}, ה-Windows Worker רץ כאן ודואג לסנכרונים של SpendWise.",
+    "defaultNote": "כשהמחשב פתוח ומחובר, הוא בודק בקשות סנכרון ומריץ מה שמותר.",
     "defaultBadge": "Default Host"
   },
   "config": {
@@ -34,17 +34,17 @@
     "keyMissing": "חסר מפתח מקומי"
   },
   "status": {
-    "stopped": "השירות כבוי",
-    "running": "השירות פעיל",
+    "stopped": "Worker כבוי",
+    "running": "Worker רץ",
     "idle": "מוכן",
-    "checking": "בודק עבודות",
-    "syncing": "מבצע סנכרון",
+    "checking": "בודק בקשות",
+    "syncing": "מסנכרן עכשיו",
     "nodeMissing": "Node.js לא נמצא",
     "nextRun": "בדיקה בעוד {0} דק'",
     "now": "עובד עכשיו",
-    "hintStopped": "הפעל שירות כדי לבדוק כל 30 דקות.",
-    "hintRunning": "השירות בודק את התור אוטומטית. אפשר לבדוק גם עכשיו.",
-    "hintBusy": "דפדפן עשוי להיפתח. לא לסגור בזמן סנכרון."
+    "hintStopped": "הפעל את ה-Worker כדי שיבדוק את SpendWise כל 30 דקות.",
+    "hintRunning": "ה-Worker רץ ברקע ובודק בקשות סנכרון כל 30 דקות.",
+    "hintBusy": "ה-Worker עובד עכשיו. אם נפתח דפדפן, לא לסגור אותו."
   },
   "result": {
     "notRunYet": "עדיין לא בוצעה בדיקה",
@@ -52,57 +52,57 @@
     "failure": "הסנכרון האחרון נכשל - פרטים בלוג",
     "alreadyRunning": "כבר יש בדיקה פעילה",
     "launchFailed": "לא הצלחתי להפעיל את ה-Agent",
-    "upToDate": "אין עבודות כרגע",
+    "upToDate": "אין בקשות סנכרון עכשיו",
     "timeout": "בוטל אחרי {0} דק' ({1} תהליך נסגר)",
     "timeoutShort": "ריצה תקועה בוטלה",
     "lastRun": "ריצה אחרונה {0}",
     "started": "התחיל {0}",
     "installNode": "התקן Node.js ונסה שוב",
     "lastContact": "בדיקה אחרונה {0} · {1} בדיקות בסשן",
-    "checking": "בודק אם יש עבודות בתור...",
-    "claimed": "נמצאו {0} עבודות לבדיקה",
+    "checking": "בודק אם SpendWise שלחה בקשות...",
+    "claimed": "הגיעו {0} בקשות סנכרון",
     "scraping": "מסנכרן את {0}",
     "openingBrowser": "פותח דפדפן עבור {0}",
     "pausing": "ממתין {0} שניות לפני העבודה הבאה",
     "cleanup": "ניקוי: {0}",
     "locked": "ריצה אחרת כבר פעילה",
-    "cooldown": "אין סנכרון עכשיו - {0} עבודות בהמתנה מקומית",
+    "cooldown": "דילגתי על {0} בקשות - סונכרנו לאחרונה",
     "stoppedAfterCurrent": "השירות נעצר; הסנכרון הנוכחי ממשיך."
   },
   "stats": {
-    "serverChecks": "בדיקות תור",
+    "serverChecks": "בדיקות שבוצעו",
     "transactionsSynced": "עסקאות שנקלטו"
   },
   "model": {
-    "title": "מה רץ כאן",
-    "queueTitle": "בודק תור",
-    "queueBody": "SpendWise שולחת בקשת סנכרון מוצפנת.",
-    "browserTitle": "פותח דפדפן מקומי",
-    "browserBody": "הכניסה לבנק קורית רק במחשב הזה.",
-    "reportTitle": "מחזיר תוצאה",
-    "reportBody": "רק תוצאת הסנכרון נשלחת חזרה.",
+    "title": "מה קורה בפועל",
+    "queueTitle": "ה-Worker שואל את SpendWise",
+    "queueBody": "יש בקשות סנכרון חדשות?",
+    "browserTitle": "אם יש - הוא מסנכרן",
+    "browserBody": "הדפדפן נפתח כאן והכניסה לבנק מקומית.",
+    "reportTitle": "אם אין - הוא חוזר לחכות",
+    "reportBody": "לא נשמרות עסקאות או חשבונות בדיסק.",
     "banksCards": "בנקים + אשראי",
     "frequency": "כל 30 דק'"
   },
   "buttons": {
-    "start": "הפעל שירות",
-    "stop": "עצור שירות",
-    "runOnce": "בדוק תור עכשיו",
+    "start": "הפעל Windows Worker",
+    "stop": "עצור Windows Worker",
+    "runOnce": "בדוק וסנכרן עכשיו",
     "clean": "נקה תהליכים תקועים",
     "openLog": "פתח לוג",
     "openFolder": "תיקיית Agent"
   },
   "tips": {
-    "startService": "הפעל בדיקת תור אוטומטית כל 30 דקות.",
+    "startService": "הפעל Worker שבודק את SpendWise כל 30 דקות.",
     "stopService": "עצור בדיקות אוטומטיות עתידיות. סנכרון פעיל לא נסגר.",
-    "checkNow": "בדוק עכשיו אם יש עבודות שמותר להריץ. עבודות בהמתנה מקומית לא יפתחו דפדפן.",
+    "checkNow": "בדיקה חד-פעמית: אם יש בקשת סנכרון שמותר להריץ, ה-Worker יסנכרן עכשיו.",
     "clean": "סגור תהליכי Agent או דפדפן תקועים והסר נעילה ישנה.",
     "openLog": "פתח את agent.log.",
     "openFolder": "פתח את תיקיית ה-Agent."
   },
   "startup": {
     "label": "הפעל אוטומטית עם Windows",
-    "interval": "בודק עבודות כל {0} דקות. ריצה תקועה תבוטל אחרי {1} דקות."
+    "interval": "ה-Worker בודק את SpendWise כל {0} דקות. ריצה תקועה תבוטל אחרי {1} דקות."
   },
   "cleanup": {
     "none": "אין מה לנקות.",

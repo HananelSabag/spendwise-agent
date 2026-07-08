@@ -102,7 +102,7 @@ non-local agent targets must use HTTPS.
 | **SpendWise Worker** | Recommended. Tray app — start once, runs forever, survives reboots. |
 | `npm run agent` | One-shot: poll the queue, decrypt, scrape, report, exit. |
 | `npm run standalone` | Dev/fallback: credentials from `.env`, legacy `/bank-sync` endpoint. |
-| `OFFLINE=1 npm run standalone` | Replay the last saved scrape — no browser, no bank contact. |
+| `OFFLINE=1 npm run standalone` | Dev only: replay a scrape saved from an explicit `DEBUG_SAVE_SCRAPES=true` run. |
 
 ## Supported banks
 
@@ -143,7 +143,7 @@ recovered by `patches/israeli-bank-scrapers+6.7.8.patch`.
 ```
 src/
 ├── agent.js            production entry — job-queue loop
-├── standalone.js       dev entry — .env credentials, OFFLINE replay
+├── standalone.js       dev entry — .env credentials, optional OFFLINE replay
 ├── core/               bank registry, browser lifecycle, scraper, cache
 ├── crypto/sealed.js    envelope open/seal (mirror of the client util)
 ├── api/client.js       claim / report / notify — the only network surface
