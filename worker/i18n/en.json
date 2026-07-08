@@ -60,12 +60,13 @@
     "installNode": "Install Node.js, then try again",
     "lastContact": "Last check {0} · {1} checks this session",
     "checking": "Checking the queue...",
-    "claimed": "Found {0} job(s)",
+    "claimed": "Found {0} job(s) to check",
     "scraping": "Syncing {0}",
     "openingBrowser": "Opening browser for {0}",
     "pausing": "Waiting {0}s before the next job",
     "cleanup": "Cleanup: {0}",
     "locked": "Another agent run is already active",
+    "cooldown": "No sync now - {0} job(s) are cooling down locally",
     "stoppedAfterCurrent": "Service stopped; the current sync will continue."
   },
   "stats": {
@@ -86,7 +87,7 @@
   "buttons": {
     "start": "Start service",
     "stop": "Stop service",
-    "runOnce": "Check now",
+    "runOnce": "Check queue now",
     "clean": "Clean stuck processes",
     "openLog": "Open log",
     "openFolder": "Agent folder"
@@ -94,7 +95,7 @@
   "tips": {
     "startService": "Start automatic queue checks every 30 minutes.",
     "stopService": "Stop future automatic checks. An active sync is not killed.",
-    "checkNow": "Run one queue check now. If no jobs are waiting, nothing else happens.",
+    "checkNow": "Check whether any queued jobs may run now. Local cooldown jobs will not open a browser.",
     "clean": "Kill stuck agent or browser processes and remove a stale lock.",
     "openLog": "Open agent.log.",
     "openFolder": "Open the agent folder."

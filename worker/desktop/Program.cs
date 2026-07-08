@@ -937,6 +937,10 @@ internal sealed class WorkerForm : Form
         {
             SetStatus("status.syncing", _blue);
         }
+        else if (snapshot.Kind is LogEventKind.Cooldown)
+        {
+            SetStatus("status.running", _green);
+        }
         else if (snapshot.Kind is LogEventKind.Failure or LogEventKind.Timeout)
         {
             SetStatus("status.syncing", _amber);
@@ -957,8 +961,22 @@ internal sealed class WorkerForm : Form
         try { tail = File.ReadLines(_logFile).TakeLast(LogTailLines).ToArray(); }
         catch { return new LogSnapshot(LogEventKind.None); }
 
+        var recentCooldown = CountLatestCooldownDeclines(tail);
+        if (recentCooldown > 0)
+        {
+            return new LogSnapshot(LogEventKind.Cooldown, Count: recentCooldown);
+        }
+
         foreach (var line in tail.Reverse())
         {
+            var noRunnable = Regex.Match(line, @"no runnable jobs after cooldown \((\d+) declined\)", RegexOptions.IgnoreCase);
+            if (noRunnable.Success)
+            {
+                return new LogSnapshot(
+                    LogEventKind.Cooldown,
+                    Count: int.Parse(noRunnable.Groups[1].Value, CultureInfo.InvariantCulture));
+            }
+
             var cleanup = Regex.Match(line, @"WORKER cleanup:\s*(.+)$");
             if (cleanup.Success) return new LogSnapshot(LogEventKind.Cleanup, Message: cleanup.Groups[1].Value.Trim());
 
@@ -1077,11 +1095,45 @@ internal sealed class WorkerForm : Form
                 _lastResult.Text = string.Format(T("result.pausing"), snapshot.Count);
                 _lastResult.ForeColor = _muted;
                 return;
+            case LogEventKind.Cooldown:
+                _lastResult.Text = string.Format(T("result.cooldown"), snapshot.Count);
+                _lastResult.ForeColor = _amber;
+                return;
             default:
                 _lastResult.Text = busy ? T("result.checking") : T("result.notRunYet");
                 _lastResult.ForeColor = _muted;
                 return;
         }
+    }
+
+    private static int CountLatestCooldownDeclines(string[] tail)
+    {
+        var count = 0;
+        for (var i = tail.Length - 1; i >= 0; i--)
+        {
+            var line = tail[i];
+            if (line.Contains("inside 3h cooldown", StringComparison.OrdinalIgnoreCase))
+            {
+                count++;
+                continue;
+            }
+
+            if (count > 0)
+            {
+                if (Regex.IsMatch(line, @"claimed \d+ job", RegexOptions.IgnoreCase)) return count;
+                if (line.Contains("cooldown declined", StringComparison.OrdinalIgnoreCase)) continue;
+                return 0;
+            }
+
+            if (line.Contains("run finished", StringComparison.OrdinalIgnoreCase) ||
+                Regex.IsMatch(line, @"DONE .*?\d+ new, \d+ skipped", RegexOptions.IgnoreCase) ||
+                line.Contains("no pending jobs", StringComparison.OrdinalIgnoreCase))
+            {
+                return 0;
+            }
+        }
+
+        return count;
     }
 
     private static string PrettySource(string source)
@@ -1475,7 +1527,8 @@ internal enum LogEventKind
     Claimed,
     Scraping,
     Warmup,
-    Pausing
+    Pausing,
+    Cooldown
 }
 
 internal sealed record LogSnapshot(

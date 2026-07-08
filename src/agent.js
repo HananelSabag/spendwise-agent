@@ -85,16 +85,24 @@ async function main() {
     // transient:true → the server records the decline without touching the
     // connection's consecutive_failures (a cooldown is not a real failure).
     const runnable = [];
+    let cooldownDeclined = 0;
     for (const job of jobs) {
       if (inCooldown(job.connection_id)) {
         log.warn(`job ${job.id} (conn ${job.connection_id}) inside ${COOLDOWN_HOURS}h cooldown — declining`);
         await reportFailure(job.id, `Agent cooldown: scraped less than ${COOLDOWN_HOURS}h ago`, { transient: true })
           .catch((e) => log.error(`report failed — ${e.message}`));
+        cooldownDeclined++;
       } else {
         runnable.push(job);
       }
     }
-    if (runnable.length === 0) return;
+    if (cooldownDeclined > 0) {
+      log.info(`cooldown declined ${cooldownDeclined} job(s); ${runnable.length} runnable`);
+    }
+    if (runnable.length === 0) {
+      log.info(`no runnable jobs after cooldown (${cooldownDeclined} declined)`);
+      return;
+    }
 
     await withBrowser(async (browser) => {
       // Clear any tabs the persistent profile restored from a previous run.
