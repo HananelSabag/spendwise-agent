@@ -3,7 +3,9 @@
  * Outbound HTTPS only; the agent never listens on any port.
  */
 
+import fs from 'node:fs';
 import { logger } from '../utils/log.js';
+import { DEVICE_TOKEN_FILE } from '../utils/paths.js';
 
 const log = logger('api');
 
@@ -18,10 +20,17 @@ function base() {
   return url.replace(/\/+$/, '');
 }
 
-function agentKey() {
+// A paired personal device authenticates with its own device token; the
+// Default Host (and any un-paired install) falls back to the single shared
+// BANK_AGENT_KEY — see pairing.js for how a device gets its token.
+function authHeader() {
+  if (fs.existsSync(DEVICE_TOKEN_FILE)) {
+    const { deviceToken } = JSON.parse(fs.readFileSync(DEVICE_TOKEN_FILE, 'utf8'));
+    if (deviceToken) return { 'X-Device-Token': deviceToken };
+  }
   const key = process.env.BANK_AGENT_KEY;
   if (!key) throw new Error('BANK_AGENT_KEY is not set');
-  return key;
+  return { 'X-Agent-Key': key };
 }
 
 async function request(method, pathName, body) {
@@ -29,13 +38,13 @@ async function request(method, pathName, body) {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'X-Agent-Key': agentKey(),
+      ...authHeader(),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
   if (res.status === 401) {
-    throw new Error('Server rejected X-Agent-Key — check BANK_AGENT_KEY matches Render');
+    throw new Error('Server rejected agent credentials — check BANK_AGENT_KEY (or pairing) is valid');
   }
   if (!res.ok) {
     throw new Error(`${method} ${pathName} → HTTP ${res.status}: ${text.slice(0, 300)}`);

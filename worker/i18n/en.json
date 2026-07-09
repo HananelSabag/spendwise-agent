@@ -119,5 +119,15 @@
     "stuckTitle": "SpendWise Worker",
     "stuckBody": "A sync got stuck and was cancelled after {0} minutes."
   },
+  "pairing": {
+    "title": "Connect to your SpendWise account",
+    "body": "Open SpendWise on the web, go to Bank Sync → My own computer, and get an 8-character code. Enter it below.",
+    "codeLabel": "Pairing code",
+    "button": "Connect",
+    "working": "Connecting...",
+    "success": "Connected! Starting the dashboard...",
+    "errorFormat": "Enter the 8-character code from SpendWise",
+    "errorGeneric": "Couldn't connect — check the code and try again"
+  },
   "footer": "SpendWise · Hananel Sabag · build {0}"
 }

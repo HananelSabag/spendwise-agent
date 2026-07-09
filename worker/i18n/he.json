@@ -119,5 +119,15 @@
     "stuckTitle": "SpendWise Worker",
     "stuckBody": "סנכרון נתקע ובוטל אחרי {0} דקות."
   },
+  "pairing": {
+    "title": "התחברות לחשבון SpendWise שלך",
+    "body": "היכנס ל-SpendWise באתר, עבור לעמוד סנכרון בנקים ובחר \"המחשב שלי\", ותקבל קוד בן 8 תווים. הזן אותו כאן.",
+    "codeLabel": "קוד החיבור",
+    "button": "התחבר",
+    "working": "מתחבר...",
+    "success": "התחברת בהצלחה! פותח את לוח הבקרה...",
+    "errorFormat": "הזן את הקוד בן 8 התווים מ-SpendWise",
+    "errorGeneric": "החיבור נכשל - בדוק את הקוד ונסה שוב"
+  },
   "footer": "SpendWise · Hananel Sabag · build {0}"
 }

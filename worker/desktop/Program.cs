@@ -193,6 +193,14 @@ internal sealed class WorkerForm : Form
     private Button _logButton = null!;
     private Button _folderButton = null!;
     private CheckBox _startupCheck = null!;
+    private Panel _pairingOverlay = null!;
+    private Label _pairingTitle = null!;
+    private Label _pairingBody = null!;
+    private Label _pairingCodeLabel = null!;
+    private TextBox _pairingCodeInput = null!;
+    private Button _pairingButton = null!;
+    private Label _pairingStatus = null!;
+    private bool _pairingBusy;
     private Label _intervalLabel = null!;
     private Label _footer = null!;
     private NotifyIcon _tray = null!;
@@ -237,12 +245,15 @@ internal sealed class WorkerForm : Form
         WireTimers();
         ApplyLanguage();
         ParseLastResult();
+        UpdatePairingVisibility();
 
         if (args.Any(a => a.Equals("--autostart", StringComparison.OrdinalIgnoreCase) ||
                           a.Equals("-AutoStart", StringComparison.OrdinalIgnoreCase) ||
                           a.Equals("autostart", StringComparison.OrdinalIgnoreCase)))
         {
-            StartWorker();
+            // Nothing useful to start yet on an un-paired personal install —
+            // the user has to open the window and enter a pairing code first.
+            if (!RequiresPairing()) StartWorker();
             WindowState = FormWindowState.Minimized;
             Hide();
         }
@@ -416,6 +427,171 @@ internal sealed class WorkerForm : Form
         _miQuit.Click += (_, _) => QuitForReal();
         _tray.MouseDoubleClick += (_, _) => ShowFromTray();
         FormClosing += OnFormClosing;
+
+        BuildPairingOverlay();
+    }
+
+    // ── Pairing (General Worker, before the device is connected) ───────────
+
+    private bool IsPaired => File.Exists(Path.Combine(_agentDir, ".agent-device.json"));
+
+    private bool RequiresPairing() => !_profile.IsDefaultHost && !IsPaired;
+
+    private void BuildPairingOverlay()
+    {
+        _pairingOverlay = new Panel
+        {
+            Bounds = new Rectangle(0, 96, 640, 834),
+            BackColor = _bg,
+        };
+        Controls.Add(_pairingOverlay);
+        _pairingOverlay.BringToFront();
+
+        var card = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 40, 592, 300) };
+        _pairingOverlay.Controls.Add(card);
+
+        _pairingTitle = NewLabel("", _title, _text, new Rectangle(24, 24, 544, 30), ContentAlignment.MiddleLeft);
+        _pairingBody = NewLabel("", _regular, _muted, new Rectangle(24, 62, 544, 44), ContentAlignment.TopLeft);
+        _pairingCodeLabel = NewLabel("", _small, _muted, new Rectangle(24, 116, 544, 18), ContentAlignment.MiddleLeft);
+        card.Controls.AddRange(new Control[] { _pairingTitle, _pairingBody, _pairingCodeLabel });
+
+        _pairingCodeInput = new TextBox
+        {
+            Bounds = new Rectangle(24, 138, 544, 34),
+            Font = new Font(_regular.FontFamily, 14f, FontStyle.Bold),
+            BackColor = _card2,
+            ForeColor = _text,
+            BorderStyle = BorderStyle.FixedSingle,
+            CharacterCasing = CharacterCasing.Upper,
+            MaxLength = 8,
+            TextAlign = HorizontalAlignment.Center,
+        };
+        card.Controls.Add(_pairingCodeInput);
+
+        _pairingButton = NewButton("", new Rectangle(24, 182, 544, 44), _indigo, Color.White, _bold);
+        card.Controls.Add(_pairingButton);
+
+        _pairingStatus = NewLabel("", _small, _muted, new Rectangle(24, 236, 544, 40), ContentAlignment.TopLeft);
+        card.Controls.Add(_pairingStatus);
+
+        _pairingButton.Click += (_, _) => _ = RunPairingAsync();
+        _pairingCodeInput.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; _ = RunPairingAsync(); }
+        };
+    }
+
+    private void ApplyPairingLanguage(bool he)
+    {
+        _pairingTitle.Text = T("pairing.title");
+        _pairingBody.Text = T("pairing.body");
+        _pairingCodeLabel.Text = T("pairing.codeLabel");
+        _pairingButton.Text = _pairingBusy ? T("pairing.working") : T("pairing.button");
+        foreach (var label in new[] { _pairingTitle, _pairingBody, _pairingCodeLabel, _pairingStatus })
+        {
+            label.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+            label.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        }
+        _pairingBody.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
+        _pairingStatus.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
+        _pairingCodeInput.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+    }
+
+    private void UpdatePairingVisibility()
+    {
+        var show = RequiresPairing();
+        _pairingOverlay.Visible = show;
+        if (show) _pairingOverlay.BringToFront();
+    }
+
+    private async Task RunPairingAsync()
+    {
+        if (_pairingBusy) return;
+        var code = (_pairingCodeInput.Text ?? "").Trim();
+        if (code.Length != 8)
+        {
+            _pairingStatus.Text = T("pairing.errorFormat");
+            _pairingStatus.ForeColor = _red;
+            return;
+        }
+
+        _pairingBusy = true;
+        _pairingButton.Enabled = false;
+        _pairingButton.Text = T("pairing.working");
+        _pairingStatus.Text = T("pairing.working");
+        _pairingStatus.ForeColor = _muted;
+
+        var pairingScript = Path.Combine(_agentDir, "src", "pairing.js");
+        try
+        {
+            var (ok, message) = await Task.Run(() => RunPairingScript(pairingScript, code));
+            if (ok)
+            {
+                _pairingStatus.Text = T("pairing.success");
+                _pairingStatus.ForeColor = _green;
+                UpdatePairingVisibility();
+                RefreshSnapshot();
+            }
+            else
+            {
+                _pairingStatus.Text = string.IsNullOrWhiteSpace(message) ? T("pairing.errorGeneric") : message;
+                _pairingStatus.ForeColor = _red;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendWorkerLog("pairing failed: " + ex);
+            _pairingStatus.Text = T("pairing.errorGeneric");
+            _pairingStatus.ForeColor = _red;
+        }
+        finally
+        {
+            _pairingBusy = false;
+            _pairingButton.Enabled = true;
+            _pairingButton.Text = T("pairing.button");
+        }
+    }
+
+    private static (bool ok, string message) RunPairingScript(string pairingScript, string code)
+    {
+        if (!File.Exists(pairingScript)) return (false, "pairing.js not found");
+        try
+        {
+            var proc = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "node",
+                    Arguments = Quote(pairingScript) + " " + Quote(code),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                },
+            };
+            proc.Start();
+            // Drain stdout concurrently (not blocking) so a slow/hung network
+            // call inside pairing.js can't wedge this on an unbounded
+            // ReadToEnd() — WaitForExit's timeout is what actually bounds it.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            if (!proc.WaitForExit(20_000))
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                return (false, "Timed out — check your internet connection and try again");
+            }
+            var stdout = stdoutTask.GetAwaiter().GetResult();
+
+            var line = stdout.Trim().Split('\n').LastOrDefault(l => l.TrimStart().StartsWith("{"));
+            if (line is null) return (false, null!);
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("ok", out var okProp) && okProp.GetBoolean();
+            var error = root.TryGetProperty("error", out var errProp) ? errProp.GetString() : null;
+            return (ok, error!);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
     }
 
     private Label NewLabel(string text, Font font, Color fore, Rectangle bounds, ContentAlignment align, bool transparent = false)
@@ -647,6 +823,8 @@ internal sealed class WorkerForm : Form
         ParseLastResult();
         RefreshConfigPills();
         UpdateBusyState();
+        ApplyPairingLanguage(he);
+        UpdatePairingVisibility();
     }
 
     private void LayoutHeader(bool he)

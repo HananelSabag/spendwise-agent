@@ -1,6 +1,7 @@
 # Secrets — NEVER commit
 .env
 agent-private.key
+.agent-device.json
 
 # Runtime state
 .agent-state.json

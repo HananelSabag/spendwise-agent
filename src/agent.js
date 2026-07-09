@@ -11,14 +11,18 @@
  *   4. Scrape via the shared engine (retry-once on transient errors)
  *   5. Report accounts (or the failure) back to the server
  *
- * .env needs ONLY: API_URL, BANK_AGENT_KEY (+ optional NTFY_*, CHROMIUM_PATH).
+ * .env needs API_URL always, plus either BANK_AGENT_KEY (Default Host) or a
+ * completed pairing (see pairing.js — writes agent-private.key + the device
+ * token this reads via api/client.js). Exit codes: 1 = real misconfiguration
+ * (fix and retry), 2 = "not paired yet" (expected before first pairing, not
+ * an error the caller should alarm on).
  */
 
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
 import fs from 'node:fs';
-import { PRIVATE_KEY_FILE } from './utils/paths.js';
+import { PRIVATE_KEY_FILE, DEVICE_TOKEN_FILE } from './utils/paths.js';
 import { log, rotateIfNeeded, logger } from './utils/log.js';
 import { inCooldown, markScraped, acquireLock, releaseLock, COOLDOWN_HOURS } from './utils/state.js';
 import { open as openEnvelope } from './crypto/sealed.js';
@@ -59,13 +63,18 @@ async function main() {
   rotateIfNeeded();
 
   // ── Preconditions (fail loud and early) ──
-  if (!process.env.API_URL || !process.env.BANK_AGENT_KEY) {
-    log.error('FATAL: API_URL and BANK_AGENT_KEY must be set in .env');
+  if (!process.env.API_URL) {
+    log.error('FATAL: API_URL must be set in .env');
+    process.exit(1);
+  }
+  const paired = fs.existsSync(DEVICE_TOKEN_FILE);
+  if (!paired && !process.env.BANK_AGENT_KEY) {
+    log.error('FATAL: BANK_AGENT_KEY must be set in .env, or pair this device with your SpendWise account');
     process.exit(1);
   }
   if (!fs.existsSync(PRIVATE_KEY_FILE)) {
-    log.error('FATAL: agent-private.key not found. Run: npm run keys');
-    process.exit(1);
+    log.info('no agent-private.key yet — waiting to be paired (or run: npm run keys for a Default Host install)');
+    process.exit(2);
   }
   if (!acquireLock()) {
     log.info('another instance is running — exiting');
