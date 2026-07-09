@@ -1652,7 +1652,12 @@ internal sealed class WorkerForm : Form
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
-            return key?.GetValue("SpendWiseWorker") is not null;
+            // Must actually point at THIS install, not just "some value exists" —
+            // a stale entry from an old launcher (e.g. a pre-C# PowerShell/VBS
+            // version) would otherwise show the checkbox checked while Windows
+            // actually launches something else entirely on login.
+            var value = key?.GetValue("SpendWiseWorker") as string;
+            return value is not null && value.Contains(Application.ExecutablePath, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
     }
