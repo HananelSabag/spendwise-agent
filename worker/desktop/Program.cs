@@ -217,7 +217,7 @@ internal sealed class WorkerForm : Form
         _stateFile = Path.Combine(_agentDir, ".worker-state.json");
         _lockFile = Path.Combine(_agentDir, ".agent.lock");
         _i18nDir = ResolveI18nDir(_workerDir, _agentDir);
-        _buildVersion = GetType().Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+        _buildVersion = ShortVersion(GetType().Assembly.GetName().Version);
 
         _state = WorkerState.Load(_stateFile);
         _profile = WorkerProfile.Load(_workerDir);
@@ -265,6 +265,12 @@ internal sealed class WorkerForm : Form
         var local = Path.Combine(workerDir, "i18n");
         if (Directory.Exists(local)) return local;
         return Path.Combine(agentDir, "worker", "i18n");
+    }
+
+    private static string ShortVersion(Version? version)
+    {
+        if (version is null) return "0.0.0";
+        return $"{version.Major}.{version.Minor}.{version.Build}";
     }
 
     private static Font AppFont(float size, FontStyle style, params string[] names)
@@ -380,7 +386,7 @@ internal sealed class WorkerForm : Form
         _intervalLabel = NewLabel("", _small, _muted, new Rectangle(24, 892, 592, 28), ContentAlignment.TopLeft);
         Controls.Add(_intervalLabel);
 
-        _footer = NewLabel("", _small, _gray, new Rectangle(390, 866, 226, 24), ContentAlignment.MiddleRight);
+        _footer = NewLabel("", _small, _gray, new Rectangle(340, 866, 276, 24), ContentAlignment.MiddleRight);
         Controls.Add(_footer);
 
         var menu = new ContextMenuStrip();
