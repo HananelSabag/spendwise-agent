@@ -156,8 +156,8 @@ async function runJobBatch(jobs, privateKey, isRestart) {
           // lockout guard (that's the per-connection 3h cooldown), just a
           // pause so we don't fire back-to-back logins. Kept short so a
           // manual multi-account "Sync Now" doesn't look frozen. Overridable.
-          const base = parseInt(process.env.INTER_JOB_PAUSE_MS, 10) || 15000;
-          const pause = base + Math.floor(Math.random() * 20_000);
+          const base = parseInt(process.env.INTER_JOB_PAUSE_MS, 10) || 8000;
+          const pause = base + Math.floor(Math.random() * 10_000);
           log.info(`pausing ${Math.round(pause / 1000)}s before next job`);
           await sleep(pause);
         }
