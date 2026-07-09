@@ -524,7 +524,7 @@ internal sealed class WorkerForm : Form
         var pairingScript = Path.Combine(_agentDir, "src", "pairing.js");
         try
         {
-            var (ok, message) = await Task.Run(() => RunPairingScript(pairingScript, code));
+            var (ok, message) = await Task.Run(() => RunPairingScript(pairingScript, _agentDir, code));
             if (ok)
             {
                 _pairingStatus.Text = T("pairing.success");
@@ -552,7 +552,7 @@ internal sealed class WorkerForm : Form
         }
     }
 
-    private static (bool ok, string message) RunPairingScript(string pairingScript, string code)
+    private static (bool ok, string message) RunPairingScript(string pairingScript, string agentDir, string code)
     {
         if (!File.Exists(pairingScript)) return (false, "pairing.js not found");
         try
@@ -563,6 +563,7 @@ internal sealed class WorkerForm : Form
                 {
                     FileName = "node",
                     Arguments = Quote(pairingScript) + " " + Quote(code),
+                    WorkingDirectory = agentDir,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,

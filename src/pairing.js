@@ -17,6 +17,9 @@
  * existing key ("better lost than stolen", same as generate-keys.js).
  */
 
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
+
 import nacl from 'tweetnacl';
 import util from 'tweetnacl-util';
 import fs from 'node:fs';
@@ -51,7 +54,15 @@ export async function pair(code, label = os.hostname()) {
   let payload;
   try { payload = JSON.parse(text); } catch { payload = { raw: text }; }
   if (!res.ok) {
-    throw new Error(payload.error || `Pairing failed (HTTP ${res.status})`);
+    // Route handlers here return { error: "string" }; the app's global
+    // fallback (unmatched routes, unexpected crashes) instead returns
+    // { error: { code, message } } — handle both shapes rather than
+    // stringifying an object into a useless "[object Object]".
+    const message =
+      typeof payload.error === 'string' ? payload.error
+      : payload.error?.message ? payload.error.message
+      : `Pairing failed (HTTP ${res.status})`;
+    throw new Error(message);
   }
 
   // Write the key first — losing the device token after this point still
@@ -72,10 +83,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   pair(code)
     .then((result) => {
       console.log(JSON.stringify({ ok: true, ...result }));
-      process.exit(0);
+      // Not process.exit(0) — forcing an immediate exit right after an async
+      // network call has completed can race libuv's handle cleanup on
+      // Windows (crashes with "Assertion failed: !(handle->flags &
+      // UV_HANDLE_CLOSING)"). Setting exitCode and letting the event loop
+      // drain naturally avoids it.
+      process.exitCode = 0;
     })
     .catch((err) => {
       console.log(JSON.stringify({ ok: false, error: err.message }));
-      process.exit(1);
+      process.exitCode = 1;
     });
 }

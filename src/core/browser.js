@@ -7,15 +7,30 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import puppeteer from 'puppeteer';
-import { PROFILE_DIR } from '../utils/paths.js';
+import { PROFILE_DIR, ROOT_DIR } from '../utils/paths.js';
 import { logger } from '../utils/log.js';
 
 const log = logger('browser');
 
+// The "Worker For Users" public download ships its own Chrome under
+// <ROOT_DIR>/chromium/ so a fresh install works without the user installing
+// Chrome themselves or puppeteer downloading one at runtime. Resolved
+// relative to ROOT_DIR (not a hardcoded path) so it works wherever the user
+// extracted the download.
+function bundledChromePath() {
+  const win = path.join(ROOT_DIR, 'chromium', 'chrome-win64', 'chrome.exe');
+  if (fs.existsSync(win)) return win;
+  const linux = path.join(ROOT_DIR, 'chromium', 'chrome-linux', 'chrome');
+  if (fs.existsSync(linux)) return linux;
+  return null;
+}
+
 function detectChrome() {
   const candidates = [
     process.env.CHROMIUM_PATH && process.env.CHROMIUM_PATH.trim(),
+    bundledChromePath(),
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
     '/snap/bin/chromium',
@@ -34,6 +49,26 @@ async function launch() {
   if (!process.env.DISPLAY && process.platform !== 'win32') {
     log.warn('no DISPLAY set — headful Chrome needs Xvfb on Linux');
   }
+  // "headful but off-screen": still a real, fully-rendered Chrome window
+  // (what passes Cloudflare's bot check), just positioned where no monitor
+  // is, so the user's own mouse/keyboard on their normal desktop can never
+  // land on it mid-scrape. Set SHOW_BROWSER_WINDOW=1 to watch it (debugging).
+  const offScreen = process.env.SHOW_BROWSER_WINDOW !== '1';
+  const args = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-extensions',
+    '--window-size=1280,900',
+    // Persistent profile otherwise restores the previous run's tabs and pops
+    // a "Chrome didn't shut down correctly" bubble — both leave stray
+    // about:blank tabs staring at the user. Suppress them.
+    '--hide-crash-restore-bubble',
+    '--disable-session-crashed-bubble',
+  ];
+  if (offScreen) args.push('--window-position=-2400,-2400');
+
   // Headful + real Chrome + persistent profile is what passes Cloudflare's
   // bot check and keeps the cf_clearance cookie between runs.
   return puppeteer.launch({
@@ -41,19 +76,7 @@ async function launch() {
     executablePath,
     userDataDir: PROFILE_DIR,
     defaultViewport: null,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-extensions',
-      '--window-size=1280,900',
-      // Persistent profile otherwise restores the previous run's tabs and pops
-      // a "Chrome didn't shut down correctly" bubble — both leave stray
-      // about:blank tabs staring at the user. Suppress them.
-      '--hide-crash-restore-bubble',
-      '--disable-session-crashed-bubble',
-    ],
+    args,
   });
 }
 

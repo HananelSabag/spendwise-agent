@@ -33,6 +33,7 @@ import { saveScrape } from './core/cache.js';
 import { claimJobs, reportSuccess, reportFailure, notify } from './api/client.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MAX_BROWSER_RESTARTS = 2;
 
 async function processJob(job, browser, privateKey) {
   const jlog = logger(`job:${job.id}`);
@@ -113,40 +114,77 @@ async function main() {
       return;
     }
 
-    await withBrowser(async (browser) => {
-      // Clear any tabs the persistent profile restored from a previous run.
-      await closeExtraPages(browser, 'run start');
-
-      let first = true;
-      for (const job of runnable) {
-        try {
-          if (!first) {
-            // Short human-like gap between DIFFERENT banks. This is not the
-            // lockout guard (that's the per-connection 3h cooldown), just a
-            // pause so we don't fire back-to-back logins. Kept short so a
-            // manual multi-account "Sync Now" doesn't look frozen. Overridable.
-            const base = parseInt(process.env.INTER_JOB_PAUSE_MS, 10) || 15000;
-            const pause = base + Math.floor(Math.random() * 20_000);
-            log.info(`pausing ${Math.round(pause / 1000)}s before next job`);
-            await sleep(pause);
-          }
-          first = false;
-          await processJob(job, browser, privateKey);
-        } catch (err) {
-          log.error(`job ${job.id} FAILED — ${err.message}`);
-          await notify(`Job ${job.id} (${job.bank_source}) failed: ${err.message}`);
-          await reportFailure(job.id, err.message)
-            .catch((e) => log.error(`report failed — ${e.message}`));
-        } finally {
-          // Close the scraper's leftover pages so tabs don't pile up job-to-job.
-          await closeExtraPages(browser, `after job ${job.id}`);
-        }
+    let pending = runnable;
+    let restarts = 0;
+    // Chrome occasionally dies mid-run (seen as every subsequent job failing
+    // instantly with "Connection closed" even though the underlying scraper
+    // is configured with skipCloseBrowser). Rather than let one crash take
+    // down every remaining job in the batch, relaunch and keep going — capped
+    // so a fundamentally broken Chrome install can't loop forever.
+    while (pending.length > 0 && restarts <= MAX_BROWSER_RESTARTS) {
+      const before = pending.length;
+      pending = await runJobBatch(pending, privateKey, restarts > 0);
+      if (pending.length === before) break; // no progress made — don't spin
+      if (pending.length > 0) {
+        restarts++;
+        log.warn(`browser died mid-run — relaunching (attempt ${restarts}/${MAX_BROWSER_RESTARTS}) for ${pending.length} remaining job(s)`);
       }
-    });
+    }
   } finally {
     releaseLock();
   }
   log.info('run finished');
+}
+
+/**
+ * Run as many `jobs` as possible in one browser session. Returns the jobs
+ * that were never attempted because the browser died partway through — the
+ * caller decides whether to relaunch and retry them or give up.
+ */
+async function runJobBatch(jobs, privateKey, isRestart) {
+  const notAttempted = [];
+
+  await withBrowser(async (browser) => {
+    await closeExtraPages(browser, isRestart ? 'browser restart' : 'run start');
+
+    let first = true;
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+      try {
+        if (!first) {
+          // Short human-like gap between DIFFERENT banks. This is not the
+          // lockout guard (that's the per-connection 3h cooldown), just a
+          // pause so we don't fire back-to-back logins. Kept short so a
+          // manual multi-account "Sync Now" doesn't look frozen. Overridable.
+          const base = parseInt(process.env.INTER_JOB_PAUSE_MS, 10) || 15000;
+          const pause = base + Math.floor(Math.random() * 20_000);
+          log.info(`pausing ${Math.round(pause / 1000)}s before next job`);
+          await sleep(pause);
+        }
+        first = false;
+        await processJob(job, browser, privateKey);
+      } catch (err) {
+        log.error(`job ${job.id} FAILED — ${err.message}`);
+        await notify(`Job ${job.id} (${job.bank_source}) failed: ${err.message}`);
+        await reportFailure(job.id, err.message)
+          .catch((e) => log.error(`report failed — ${e.message}`));
+      } finally {
+        // Close the scraper's leftover pages so tabs don't pile up job-to-job
+        // — skip if the browser itself is already gone, that call would just
+        // throw and get logged as noise on top of the real problem.
+        if (browser.isConnected()) {
+          await closeExtraPages(browser, `after job ${job.id}`);
+        }
+      }
+
+      if (!browser.isConnected()) {
+        notAttempted.push(...jobs.slice(i + 1));
+        break;
+      }
+    }
+  });
+
+  return notAttempted;
 }
 
 main().catch(async (err) => {

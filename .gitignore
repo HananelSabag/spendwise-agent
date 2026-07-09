@@ -22,6 +22,11 @@ worker/desktop/obj/
 Worker Windows App/
 SpendWise Default Worker/
 
+# Fully self-contained public download (exe + full agent source + its own
+# node_modules) — built from source, published as a GitHub Release asset,
+# never committed (its node_modules alone would be hundreds of MB).
+Worker For Users/
+
 # Scraped data (financial info stays local)
 scraped-data/
 
