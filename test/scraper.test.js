@@ -20,6 +20,42 @@ test('mapAccounts maps a valid account', () => {
   assert.equal(acc.txns[1].identifier, undefined);         // absent stays absent
 });
 
+test('mapAccounts preserves card purchase and statement dates separately', () => {
+  const raw = [{
+    accountNumber: '9962',
+    txns: [{
+      date: '2026-07-09T12:00:00.000Z',
+      processedDate: '2026-07-10T00:00:00.000Z',
+      description: 'Card purchase',
+      chargedAmount: -275.5,
+      identifier: 'cal-1',
+      status: 'completed',
+    }],
+  }];
+
+  const [account] = mapAccounts('visa_cal', raw);
+  assert.equal(account.txns[0].date, '2026-07-09T12:00:00.000Z');
+  assert.equal(account.txns[0].processed_date, '2026-07-10T00:00:00.000Z');
+  assert.equal(account.txns[0].status, 'completed');
+});
+
+test('mapAccounts ignores invalid processed dates and unknown statuses', () => {
+  const raw = [{
+    accountNumber: 'x',
+    txns: [{
+      date: '2026-07-10T08:00:00.000Z',
+      processedDate: 'not-a-date',
+      description: 'Pending purchase',
+      chargedAmount: -50,
+      status: 'mystery',
+    }],
+  }];
+
+  const [account] = mapAccounts('max', raw);
+  assert.equal(account.txns[0].processed_date, undefined);
+  assert.equal(account.txns[0].status, undefined);
+});
+
 test('mapAccounts drops malformed transactions instead of sending garbage', () => {
   const raw = [{
     accountNumber: 'x',

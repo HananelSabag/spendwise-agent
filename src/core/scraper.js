@@ -102,6 +102,21 @@ export function mapAccounts(source, rawAccounts) {
         description: String(txn.description || '').trim(),
         charged_amount: amount,
       };
+      // Credit companies expose two different dates: `date` is when the
+      // purchase happened, while `processedDate` is when CAL/Max/Isracard
+      // actually debit the card statement. SpendWise needs both: purchase
+      // date drives spending analytics; processed date makes statement totals
+      // line up on cycle-day boundaries. Older/partial scraper responses may
+      // omit it, so only send a validated value.
+      if (txn.processedDate) {
+        const processedDate = new Date(txn.processedDate);
+        if (!isNaN(processedDate.getTime())) {
+          mapped.processed_date = processedDate.toISOString();
+        }
+      }
+      if (txn.status === 'pending' || txn.status === 'completed') {
+        mapped.status = txn.status;
+      }
       if (txn.identifier !== undefined && txn.identifier !== null) {
         mapped.identifier = String(txn.identifier);
       }
