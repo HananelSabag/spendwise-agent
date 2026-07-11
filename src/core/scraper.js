@@ -8,6 +8,7 @@ import { createScraper } from 'israeli-bank-scrapers';
 import { ROOT_DIR } from '../utils/paths.js';
 import { logger } from '../utils/log.js';
 import { assertKnownBank } from './banks.js';
+import { rawDebugEnabled, writeRawScrape } from './rawReport.js';
 
 const RETRYABLE = ['TIMEOUT', 'GENERIC', 'GENERAL_ERROR'];
 
@@ -75,7 +76,19 @@ export async function scrapeBank(source, credentials, browser, fromDate = scrape
   if (!result.success) {
     throw new Error(`${result.errorType || 'ScrapeError'}: ${result.errorMessage || 'unknown error'}`);
   }
-  return result.accounts || [];
+
+  const accounts = result.accounts || [];
+  // Debug: when raw export is toggled on (worker button / env / flag file),
+  // drop exactly what the scraper returned before we map anything.
+  if (rawDebugEnabled()) {
+    try {
+      const file = writeRawScrape(source, accounts);
+      log.info(`RAW debug report → ${file}`);
+    } catch (e) {
+      log.warn(`raw report write failed: ${e.message}`);
+    }
+  }
+  return accounts;
 }
 
 /**
