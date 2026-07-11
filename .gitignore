@@ -26,6 +26,8 @@ SpendWise Default Worker/
 # node_modules) — built from source, published as a GitHub Release asset,
 # never committed (its node_modules alone would be hundreds of MB).
 Worker For Users/
+SpendWise Agent Release/
+*.zip
 
 # Scraped data (financial info stays local)
 scraped-data/

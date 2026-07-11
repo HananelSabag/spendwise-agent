@@ -10,8 +10,8 @@
   "header": {
     "subtitle": "סוכן סנכרון מקומי",
     "pill": "מקומי ומאובטח",
-    "generalSubtitle": "סוכן סנכרון מקומי",
-    "defaultSubtitle": "סנכרון פרטי · המחשב הזה",
+    "generalSubtitle": "הסנכרון הפרטי שלך · המחשב הזה",
+    "defaultSubtitle": "ה־Default Worker של חננאל · עמדת מנהל",
     "generalPill": "מקומי ומאובטח",
     "defaultPill": "Default Host"
   },
@@ -127,13 +127,14 @@
   },
   "pairing": {
     "title": "התחברות לחשבון SpendWise שלך",
-    "body": "היכנס ל-SpendWise באתר, עבור לעמוד סנכרון בנקים ובחר \"המחשב שלי\", ותקבל קוד בן 8 תווים. הזן אותו כאן.",
+    "body": "ב־SpendWise פתח סנכרון בנקים ← Agent, בחר \"המחשב שלי\", והעתק לכאן את הקוד בן 8 התווים.",
     "codeLabel": "קוד החיבור",
     "button": "התחבר",
     "working": "מתחבר...",
     "success": "התחברת בהצלחה! פותח את לוח הבקרה...",
     "errorFormat": "הזן את הקוד בן 8 התווים מ-SpendWise",
-    "errorGeneric": "החיבור נכשל - בדוק את הקוד ונסה שוב"
+    "errorGeneric": "החיבור נכשל - בדוק את הקוד ונסה שוב",
+    "help": "פרטי מהיסוד · פרטי הכניסה לבנק מפוענחים רק במחשב הזה."
   },
   "footer": "SpendWise · Hananel Sabag · build {0}"
 }

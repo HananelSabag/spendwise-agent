@@ -60,24 +60,26 @@ SpendWise client              SpendWise server (Render)          THIS MACHINE
 A small native tray app (`worker/`) so you always know sync is running —
 no console windows, no taskbar clutter.
 
+### For regular users
+
+Download the latest `SpendWiseAgent-ForUsers.zip` from GitHub Releases, extract
+the whole folder, and open **`SpendWiseWorker.exe`** from its root. Node.js and
+Chrome are bundled; the user only enters the 8-character pairing code shown in
+SpendWise under **Bank Sync → Agent → My own computer**. The bilingual
+`START-HERE.md` inside the ZIP covers the same five-step setup.
+
+The repository publishes one personal-user edition. Hananel's managed Default
+Worker is a private local profile built from the same reviewed source; its
+profile, keys, logs, and runnable bundle are deliberately excluded from Git.
+
 - **Start Worker** → runs the agent now and every 30 minutes
 - Live status, run counters, and last-sync result
 - **Launch on Windows startup** → survives reboots automatically; you never
   have to remember to restart it
 - Minimises to the system tray
 
-```powershell
-# one-time: add a "SpendWise Worker" shortcut to Desktop + Start Menu
-powershell -ExecutionPolicy Bypass -File worker\Install-Worker.ps1
-```
-
-Double-click **SpendWise Worker**, hit **Start Worker**, tick **Launch on
+Double-click **SpendWiseWorker.exe**, hit **Start Worker**, tick **Launch on
 Windows startup**. Done — it runs quietly forever.
-
-> Prefer fully headless (runs even when logged out)? Use Task Scheduler:
-> ```powershell
-> schtasks /Create /TN "SpendWise Agent" /TR "wscript.exe \"%CD%\run-agent-hidden.vbs\"" /SC MINUTE /MO 30 /F
-> ```
 
 ## Setup
 

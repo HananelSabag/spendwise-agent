@@ -10,8 +10,8 @@
   "header": {
     "subtitle": "Local sync agent",
     "pill": "Local and secure",
-    "generalSubtitle": "Local sync agent",
-    "defaultSubtitle": "Private sync · this computer",
+    "generalSubtitle": "Your private sync · this computer",
+    "defaultSubtitle": "Hananel's Default Worker · admin host",
     "generalPill": "Local and secure",
     "defaultPill": "Default host"
   },
@@ -127,13 +127,14 @@
   },
   "pairing": {
     "title": "Connect to your SpendWise account",
-    "body": "Open SpendWise on the web, go to Bank Sync → My own computer, and get an 8-character code. Enter it below.",
+    "body": "In SpendWise, open Bank Sync → Agent, choose ‘My own computer’, and copy the 8-character code here.",
     "codeLabel": "Pairing code",
     "button": "Connect",
     "working": "Connecting...",
     "success": "Connected! Starting the dashboard...",
     "errorFormat": "Enter the 8-character code from SpendWise",
-    "errorGeneric": "Couldn't connect — check the code and try again"
+    "errorGeneric": "Couldn't connect — check the code and try again",
+    "help": "Private by design · your bank credentials are decrypted only on this computer."
   },
   "footer": "SpendWise · Hananel Sabag · build {0}"
 }

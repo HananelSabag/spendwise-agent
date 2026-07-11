@@ -14,7 +14,6 @@ $WorkerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Project = Join-Path $WorkerDir 'desktop\SpendWiseWorker.Desktop.csproj'
 $PublishDir = Join-Path $WorkerDir 'desktop\bin\Release\net8.0-windows\win-x64\publish'
 $OutExe = Join-Path $WorkerDir 'SpendWiseWorker.exe'
-$I18nOut = Join-Path $WorkerDir 'i18n'
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
   Write-Error 'dotnet SDK not found. Install the .NET Desktop SDK, then run this again.'
@@ -55,10 +54,6 @@ if (-not (Test-Path $publishedExe)) {
 Copy-Item -LiteralPath $publishedExe -Destination $OutExe -Force
 Copy-Item -LiteralPath (Join-Path $PublishDir 'spendwise.ico') -Destination (Join-Path $WorkerDir 'spendwise.ico') -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath (Join-Path $PublishDir 'logo-source.png') -Destination (Join-Path $WorkerDir 'logo-source.png') -Force -ErrorAction SilentlyContinue
-
-if (-not (Test-Path $I18nOut)) { New-Item -ItemType Directory -Path $I18nOut | Out-Null }
-Copy-Item -LiteralPath (Join-Path $PublishDir 'i18n\en.json') -Destination (Join-Path $I18nOut 'en.json') -Force
-Copy-Item -LiteralPath (Join-Path $PublishDir 'i18n\he.json') -Destination (Join-Path $I18nOut 'he.json') -Force
 
 Write-Output ''
 Write-Output "Built: $OutExe"

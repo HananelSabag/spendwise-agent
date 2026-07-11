@@ -86,6 +86,9 @@ internal static class WorkerSmoke
 
     private static string FindAgentDir(string start)
     {
+        var packaged = Path.Combine(start, "app", "src", "agent.js");
+        if (File.Exists(packaged)) return Path.Combine(start, "app");
+
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
@@ -207,6 +210,7 @@ internal sealed class WorkerForm : Form
     private TextBox _pairingCodeInput = null!;
     private Button _pairingButton = null!;
     private Label _pairingStatus = null!;
+    private Label _pairingHelp = null!;
     private bool _pairingBusy;
     private Label _intervalLabel = null!;
     private Label _footer = null!;
@@ -238,25 +242,21 @@ internal sealed class WorkerForm : Form
         _profile = WorkerProfile.Load(_workerDir);
         _i18n = I18n.Load(_i18nDir, _state.Language);
 
-        // The built-in host is an operator utility used every day, not an
-        // onboarding screen. Give it a quiet, welcoming light surface while
-        // leaving the distributable user worker untouched for its later pass.
-        if (_profile.IsDefaultHost)
-        {
-            _bg = Color.FromArgb(237, 240, 246);
-            _card = Color.White;
-            _card2 = Color.FromArgb(241, 243, 248);
-            _panel = Color.White;
-            _border = Color.FromArgb(222, 226, 235);
-            _text = Color.FromArgb(24, 31, 46);
-            _muted = Color.FromArgb(100, 111, 132);
-            _gray = Color.FromArgb(139, 149, 168);
-            _indigo = Color.FromArgb(79, 70, 229);
-            _indigoDeep = Color.FromArgb(79, 70, 229);
-            _green = Color.FromArgb(5, 150, 105);
-            _amber = Color.FromArgb(180, 83, 9);
-            _cyan = Color.FromArgb(8, 145, 178);
-        }
+        // One calm, modern surface for both editions. The personal edition
+        // adds onboarding; the managed default host keeps its operator tools.
+        _bg = Color.FromArgb(237, 240, 246);
+        _card = Color.White;
+        _card2 = Color.FromArgb(241, 243, 248);
+        _panel = Color.White;
+        _border = Color.FromArgb(222, 226, 235);
+        _text = Color.FromArgb(24, 31, 46);
+        _muted = Color.FromArgb(100, 111, 132);
+        _gray = Color.FromArgb(139, 149, 168);
+        _indigo = Color.FromArgb(79, 70, 229);
+        _indigoDeep = Color.FromArgb(79, 70, 229);
+        _green = Color.FromArgb(5, 150, 105);
+        _amber = Color.FromArgb(180, 83, 9);
+        _cyan = Color.FromArgb(8, 145, 178);
 
         _regular = AppFont(10.0f, FontStyle.Regular, "Segoe UI Variable Text", "Segoe UI");
         _bold = AppFont(10.5f, FontStyle.Bold, "Segoe UI Variable Text", "Segoe UI");
@@ -288,6 +288,9 @@ internal sealed class WorkerForm : Form
 
     private static string FindAgentDir(string start)
     {
+        var packaged = Path.Combine(start, "app", "src", "agent.js");
+        if (File.Exists(packaged)) return Path.Combine(start, "app");
+
         var dir = new DirectoryInfo(start);
         while (dir is not null)
         {
@@ -326,7 +329,7 @@ internal sealed class WorkerForm : Form
     private void BuildUi()
     {
         Text = T("app.title");
-        ClientSize = new Size(640, _profile.IsDefaultHost ? 710 : 980);
+        ClientSize = new Size(640, 710);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -335,9 +338,7 @@ internal sealed class WorkerForm : Form
         Font = _regular;
         Icon = LoadIcon();
 
-        _header = _profile.IsDefaultHost
-            ? new GradientHeader(_bg, Color.FromArgb(229, 233, 243), _border) { Bounds = new Rectangle(0, 0, 640, 88) }
-            : new GradientHeader(_indigoDeep, _bg, _card2) { Bounds = new Rectangle(0, 0, 640, 96) };
+        _header = new GradientHeader(_bg, Color.FromArgb(229, 233, 243), _border) { Bounds = new Rectangle(0, 0, 640, 88) };
         Controls.Add(_header);
 
         _logo = new PictureBox
@@ -349,19 +350,19 @@ internal sealed class WorkerForm : Form
         };
         _header.Controls.Add(_logo);
 
-        _headerTitle = NewLabel(T("app.title"), _title, _profile.IsDefaultHost ? _text : Color.White, new Rectangle(94, 24, 300, 28), ContentAlignment.MiddleLeft, true);
-        _headerSubtitle = NewLabel(T("header.subtitle"), _small, _profile.IsDefaultHost ? _muted : Color.FromArgb(199, 210, 254), new Rectangle(96, 56, 320, 20), ContentAlignment.MiddleLeft, true);
+        _headerTitle = NewLabel(T("app.title"), _title, _text, new Rectangle(94, 24, 300, 28), ContentAlignment.MiddleLeft, true);
+        _headerSubtitle = NewLabel(T("header.subtitle"), _small, _muted, new Rectangle(96, 56, 320, 20), ContentAlignment.MiddleLeft, true);
         _header.Controls.Add(_headerTitle);
         _header.Controls.Add(_headerSubtitle);
 
         _languageButton = NewButton(
             T("meta.toggle"),
             new Rectangle(536, 18, 76, 28),
-            _profile.IsDefaultHost ? _card : _panel,
-            _profile.IsDefaultHost ? _text : Color.White,
+            _card,
+            _text,
             _pillFont);
         _languageButton.FlatAppearance.BorderSize = 1;
-        _languageButton.FlatAppearance.BorderColor = _profile.IsDefaultHost ? _border : Color.FromArgb(129, 140, 248);
+        _languageButton.FlatAppearance.BorderColor = _border;
         _header.Controls.Add(_languageButton);
 
         _headerPill = Pill(T("header.pill"), new Rectangle(454, 56, 158, 26), Color.White, Color.FromArgb(34, 197, 94));
@@ -467,10 +468,10 @@ internal sealed class WorkerForm : Form
         FormClosing += OnFormClosing;
 
         BuildPairingOverlay();
-        if (_profile.IsDefaultHost) ApplyDefaultHostLayout();
+        ApplyCompactLayout();
     }
 
-    private void ApplyDefaultHostLayout()
+    private void ApplyCompactLayout()
     {
         _hostCard.Visible = false;
         _modelCard.Visible = false;
@@ -520,13 +521,13 @@ internal sealed class WorkerForm : Form
     {
         _pairingOverlay = new Panel
         {
-            Bounds = new Rectangle(0, 96, 640, 834),
+            Bounds = new Rectangle(0, 88, 640, 622),
             BackColor = _bg,
         };
         Controls.Add(_pairingOverlay);
         _pairingOverlay.BringToFront();
 
-        var card = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 40, 592, 300) };
+        var card = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 34, 592, 326), Radius = 18 };
         _pairingOverlay.Controls.Add(card);
 
         _pairingTitle = NewLabel("", _title, _text, new Rectangle(24, 24, 544, 30), ContentAlignment.MiddleLeft);
@@ -548,10 +549,15 @@ internal sealed class WorkerForm : Form
         card.Controls.Add(_pairingCodeInput);
 
         _pairingButton = NewButton("", new Rectangle(24, 182, 544, 44), _indigo, Color.White, _bold);
+        if (_pairingButton is RoundedButton pairingRounded) pairingRounded.Radius = 12;
+        SetButtonBorder(_pairingButton, Color.FromArgb(67, 56, 202), 1);
         card.Controls.Add(_pairingButton);
 
-        _pairingStatus = NewLabel("", _small, _muted, new Rectangle(24, 236, 544, 40), ContentAlignment.TopLeft);
+        _pairingStatus = NewLabel("", _small, _muted, new Rectangle(24, 236, 544, 38), ContentAlignment.TopLeft);
         card.Controls.Add(_pairingStatus);
+
+        _pairingHelp = NewLabel("", _small, _gray, new Rectangle(24, 278, 544, 30), ContentAlignment.TopLeft);
+        card.Controls.Add(_pairingHelp);
 
         _pairingButton.Click += (_, _) => _ = RunPairingAsync();
         _pairingCodeInput.KeyDown += (_, e) =>
@@ -566,13 +572,15 @@ internal sealed class WorkerForm : Form
         _pairingBody.Text = T("pairing.body");
         _pairingCodeLabel.Text = T("pairing.codeLabel");
         _pairingButton.Text = _pairingBusy ? T("pairing.working") : T("pairing.button");
-        foreach (var label in new[] { _pairingTitle, _pairingBody, _pairingCodeLabel, _pairingStatus })
+        _pairingHelp.Text = T("pairing.help");
+        foreach (var label in new[] { _pairingTitle, _pairingBody, _pairingCodeLabel, _pairingStatus, _pairingHelp })
         {
             label.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
             label.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
         }
         _pairingBody.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
         _pairingStatus.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
+        _pairingHelp.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
         _pairingCodeInput.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
     }
 
@@ -603,7 +611,7 @@ internal sealed class WorkerForm : Form
         var pairingScript = Path.Combine(_agentDir, "src", "pairing.js");
         try
         {
-            var (ok, message) = await Task.Run(() => RunPairingScript(pairingScript, _agentDir, code));
+            var (ok, message) = await Task.Run(() => RunPairingScript(NodeExecutable(), pairingScript, _agentDir, code));
             if (ok)
             {
                 _pairingStatus.Text = T("pairing.success");
@@ -631,7 +639,7 @@ internal sealed class WorkerForm : Form
         }
     }
 
-    private static (bool ok, string message) RunPairingScript(string pairingScript, string agentDir, string code)
+    private static (bool ok, string message) RunPairingScript(string nodeExecutable, string pairingScript, string agentDir, string code)
     {
         if (!File.Exists(pairingScript)) return (false, "pairing.js not found");
         try
@@ -640,7 +648,7 @@ internal sealed class WorkerForm : Form
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "node",
+                    FileName = nodeExecutable,
                     Arguments = Quote(pairingScript) + " " + Quote(code),
                     WorkingDirectory = agentDir,
                     UseShellExecute = false,
@@ -910,43 +918,15 @@ internal sealed class WorkerForm : Form
 
     private void LayoutHeader(bool he)
     {
-        if (_profile.IsDefaultHost)
-        {
-            _headerPill.Visible = false;
-            _logo.Bounds = he ? new Rectangle(564, 20, 44, 44) : new Rectangle(28, 20, 44, 44);
-            _headerTitle.Bounds = he ? new Rectangle(194, 16, 354, 28) : new Rectangle(86, 16, 360, 28);
-            _headerSubtitle.Bounds = he ? new Rectangle(194, 45, 354, 20) : new Rectangle(88, 45, 360, 20);
-            _languageButton.Bounds = he ? new Rectangle(28, 25, 82, 32) : new Rectangle(530, 25, 82, 32);
-            _headerTitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
-            _headerSubtitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
-            _headerTitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
-            _headerSubtitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
-            return;
-        }
-
-        if (he)
-        {
-            _logo.Bounds = new Rectangle(564, 24, 48, 48);
-            _headerTitle.Bounds = new Rectangle(224, 24, 322, 28);
-            _headerSubtitle.Bounds = new Rectangle(204, 56, 342, 20);
-            _languageButton.Bounds = new Rectangle(28, 18, 76, 28);
-            _headerPill.Bounds = new Rectangle(28, 56, 158, 26);
-            _headerTitle.TextAlign = ContentAlignment.MiddleRight;
-            _headerSubtitle.TextAlign = ContentAlignment.MiddleRight;
-            _headerTitle.RightToLeft = RightToLeft.Yes;
-            _headerSubtitle.RightToLeft = RightToLeft.Yes;
-            return;
-        }
-
-        _logo.Bounds = new Rectangle(28, 24, 48, 48);
-        _headerTitle.Bounds = new Rectangle(94, 24, 300, 28);
-        _headerSubtitle.Bounds = new Rectangle(96, 56, 320, 20);
-        _languageButton.Bounds = new Rectangle(536, 18, 76, 28);
-        _headerPill.Bounds = new Rectangle(454, 56, 158, 26);
-        _headerTitle.TextAlign = ContentAlignment.MiddleLeft;
-        _headerSubtitle.TextAlign = ContentAlignment.MiddleLeft;
-        _headerTitle.RightToLeft = RightToLeft.No;
-        _headerSubtitle.RightToLeft = RightToLeft.No;
+        _headerPill.Visible = false;
+        _logo.Bounds = he ? new Rectangle(564, 20, 44, 44) : new Rectangle(28, 20, 44, 44);
+        _headerTitle.Bounds = he ? new Rectangle(194, 16, 354, 28) : new Rectangle(86, 16, 360, 28);
+        _headerSubtitle.Bounds = he ? new Rectangle(194, 45, 354, 20) : new Rectangle(88, 45, 360, 20);
+        _languageButton.Bounds = he ? new Rectangle(28, 25, 82, 32) : new Rectangle(530, 25, 82, 32);
+        _headerTitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+        _headerSubtitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+        _headerTitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _headerSubtitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
     }
 
     private void ApplyHostCopy(bool he)
@@ -1602,7 +1582,7 @@ internal sealed class WorkerForm : Form
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "node",
+                    FileName = NodeExecutable(),
                     Arguments = Quote(_agentJs),
                     WorkingDirectory = _agentDir,
                     UseShellExecute = false,
@@ -1658,6 +1638,12 @@ internal sealed class WorkerForm : Form
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+
+    private string NodeExecutable()
+    {
+        var bundled = Path.Combine(_agentDir, "runtime", "node.exe");
+        return File.Exists(bundled) ? bundled : "node";
+    }
 
     // ── RAW debug toggle ──────────────────────────────────────────────────────
     // Flips scraped-data/RAW_DEBUG. The node agent reads this file each scrape:
