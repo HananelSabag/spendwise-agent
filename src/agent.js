@@ -29,6 +29,7 @@ import { open as openEnvelope } from './crypto/sealed.js';
 import { BANKS, assertCredentialShape } from './core/banks.js';
 import { withBrowser, warmup, closeExtraPages } from './core/browser.js';
 import { scrapeBank, mapAccounts } from './core/scraper.js';
+import { rawDebugEnabled } from './core/rawReport.js';
 import { saveScrape } from './core/cache.js';
 import { claimJobs, reportSuccess, reportFailure, notify } from './api/client.js';
 
@@ -94,10 +95,15 @@ async function main() {
     // Cooldown gate: decline jobs we refuse to run so the server sees them.
     // transient:true → the server records the decline without touching the
     // connection's consecutive_failures (a cooldown is not a real failure).
+    // RAW debug is a deliberate diagnostic run — bypass the cooldown so a
+    // just-synced connection can be re-scraped to capture its raw output.
+    const rawDebug = rawDebugEnabled();
+    if (rawDebug) log.info('🐞 RAW DEBUG ON — bypassing cooldown, dumping raw scrape to scraped-data/');
+
     const runnable = [];
     let cooldownDeclined = 0;
     for (const job of jobs) {
-      if (inCooldown(job.connection_id)) {
+      if (inCooldown(job.connection_id) && !rawDebug) {
         log.warn(`sync request ${job.id} (conn ${job.connection_id}) too soon since last successful sync — skipping`);
         await reportFailure(job.id, `Agent cooldown: scraped less than ${COOLDOWN_HOURS}h ago`, { transient: true })
           .catch((e) => log.error(`report failed — ${e.message}`));
