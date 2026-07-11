@@ -807,11 +807,10 @@ internal sealed class WorkerForm : Form
 
     private void WireTimers()
     {
-        _loopTimer.Interval = IntervalMinutes * 60 * 1000;
         _loopTimer.Tick += (_, _) =>
         {
-            _nextRunAt = DateTime.Now.AddMinutes(IntervalMinutes);
             InvokeAgentRun();
+            ScheduleNextAlignedCheck();
         };
 
         _countdownTimer.Interval = 30 * 1000;
@@ -1519,6 +1518,17 @@ internal sealed class WorkerForm : Form
         }
     }
 
+    private void ScheduleNextAlignedCheck()
+    {
+        var now = DateTime.Now;
+        var next = now.Minute < 30
+            ? new DateTime(now.Year, now.Month, now.Day, now.Hour, 30, 0, now.Kind)
+            : new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, now.Kind).AddHours(1);
+        _nextRunAt = next;
+        _loopTimer.Interval = Math.Max(1000, (int)Math.Min(int.MaxValue, (next - now).TotalMilliseconds));
+        UpdateNextRun();
+    }
+
     private void WatchdogTick()
     {
         if (!_busy || _runStartedAt is null) return;
@@ -1564,8 +1574,7 @@ internal sealed class WorkerForm : Form
             _lastResult.ForeColor = _amber;
             if (_running)
             {
-                _nextRunAt = DateTime.Now.AddMinutes(IntervalMinutes);
-                UpdateNextRun();
+                ScheduleNextAlignedCheck();
             }
             return;
         }
@@ -1711,8 +1720,7 @@ internal sealed class WorkerForm : Form
             _mainButton.BackColor = _card2;
         }
         SetStatus("status.running", _green);
-        _nextRunAt = DateTime.Now.AddMinutes(IntervalMinutes);
-        UpdateNextRun();
+        ScheduleNextAlignedCheck();
         _loopTimer.Start();
         InvokeAgentRun();
     }
