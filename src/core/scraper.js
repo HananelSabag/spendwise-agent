@@ -121,6 +121,34 @@ export function mapAccounts(source, rawAccounts) {
       // this separate from the transaction identity used for dedup.
       const memo = String(txn.memo ?? '').trim();
       mapped.notes = memo || '';
+      const originalAmount = Number(txn.originalAmount);
+      if (Number.isFinite(originalAmount)) mapped.original_amount = originalAmount;
+      const originalCurrency = String(txn.originalCurrency ?? '').trim();
+      if (originalCurrency) mapped.original_currency = originalCurrency;
+      const chargedCurrency = String(txn.chargedCurrency ?? '').trim();
+      if (chargedCurrency) mapped.charged_currency = chargedCurrency;
+      const txnKind = String(txn.type ?? '').trim();
+      if (txnKind) mapped.txn_kind = txnKind;
+
+      // Some providers expose structured installment metadata; others put the
+      // same fact only in the memo (e.g. "תשלום 5 מתוך 10"). Preserve either
+      // representation so the server never has to infer it from an amount/date.
+      const structured = txn.installments && typeof txn.installments === 'object'
+        ? txn.installments
+        : null;
+      const memoInstallment = memo.match(/תשלום\s+(\d+)\s+מתוך\s+(\d+)/);
+      const installmentNumber = Number(
+        structured?.number ?? structured?.current ?? memoInstallment?.[1],
+      );
+      const installmentTotal = Number(
+        structured?.total ?? structured?.count ?? memoInstallment?.[2],
+      );
+      if (Number.isInteger(installmentNumber) && installmentNumber > 0) {
+        mapped.installment_number = installmentNumber;
+      }
+      if (Number.isInteger(installmentTotal) && installmentTotal > 0) {
+        mapped.installment_total = installmentTotal;
+      }
       // Credit companies expose two different dates: `date` is when the
       // purchase happened, while `processedDate` is when CAL/Max/Isracard
       // actually debit the card statement. SpendWise needs both: purchase

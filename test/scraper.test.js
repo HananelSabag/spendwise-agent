@@ -53,6 +53,45 @@ test('mapAccounts preserves provider memo as bank notes', () => {
   assert.equal(account.txns[0].notes, 'Monthly salary');
 });
 
+test('mapAccounts preserves FX, transaction kind, and installment metadata', () => {
+  const [account] = mapAccounts('max', [{
+    accountNumber: '2254',
+    txns: [{
+      chargedAmount: -61.72,
+      chargedCurrency: 'ILS',
+      originalAmount: -20,
+      originalCurrency: 'USD',
+      type: 'installments',
+      installments: { number: 5, total: 10 },
+      date: '2026-07-02T12:00:00.000Z',
+      description: 'Provider charge',
+    }],
+  }]);
+
+  assert.equal(account.txns[0].original_amount, -20);
+  assert.equal(account.txns[0].original_currency, 'USD');
+  assert.equal(account.txns[0].charged_currency, 'ILS');
+  assert.equal(account.txns[0].txn_kind, 'installments');
+  assert.equal(account.txns[0].installment_number, 5);
+  assert.equal(account.txns[0].installment_total, 10);
+});
+
+test('mapAccounts extracts installment position from provider memo fallback', () => {
+  const [account] = mapAccounts('max', [{
+    accountNumber: '2254',
+    txns: [{
+      chargedAmount: -518.98,
+      date: '2026-07-10T00:00:00.000Z',
+      description: 'Municipality',
+      memo: 'תשלום 5 מתוך 10',
+      type: 'installments',
+    }],
+  }]);
+
+  assert.equal(account.txns[0].installment_number, 5);
+  assert.equal(account.txns[0].installment_total, 10);
+});
+
 test('mapAccounts ignores invalid processed dates and unknown statuses', () => {
   const raw = [{
     accountNumber: 'x',
