@@ -11,7 +11,7 @@
     "subtitle": "סוכן סנכרון מקומי",
     "pill": "מקומי ומאובטח",
     "generalSubtitle": "סוכן סנכרון מקומי",
-    "defaultSubtitle": "שרת הסנכרון הרשמי",
+    "defaultSubtitle": "סנכרון פרטי · המחשב הזה",
     "generalPill": "מקומי ומאובטח",
     "defaultPill": "Default Host"
   },
@@ -44,7 +44,8 @@
     "now": "עובד עכשיו",
     "hintStopped": "הפעל את ה-Worker כדי שיבדוק את SpendWise כל 30 דקות.",
     "hintRunning": "ה-Worker רץ ברקע ובודק בקשות סנכרון כל 30 דקות.",
-    "hintBusy": "ה-Worker עובד עכשיו. אם נפתח דפדפן, לא לסגור אותו."
+    "hintBusy": "ה-Worker עובד עכשיו. אם נפתח דפדפן, לא לסגור אותו.",
+    "hintBusyElapsed": "עובד כבר {0} · סטטוס חי מה-Agent"
   },
   "result": {
     "notRunYet": "עדיין לא בוצעה בדיקה",
@@ -61,8 +62,11 @@
     "lastContact": "בדיקה אחרונה {0} · {1} בדיקות בסשן",
     "checking": "בודק אם SpendWise שלחה בקשות...",
     "claimed": "הגיעו {0} בקשות סנכרון",
+    "launchingBrowser": "פותח דפדפן מאובטח",
+    "browserReady": "מחובר אל {0} · מכין את החשבון",
     "scraping": "מסנכרן את {0}",
     "openingBrowser": "פותח דפדפן עבור {0}",
+    "saving": "נקראו {0} חשבונות ו-{1} עסקאות · שומר עכשיו",
     "pausing": "ממתין {0} שניות לפני העבודה הבאה",
     "cleanup": "ניקוי: {0}",
     "locked": "ריצה אחרת כבר פעילה",
@@ -90,7 +94,9 @@
     "runOnce": "בדוק וסנכרן עכשיו",
     "clean": "נקה תהליכים תקועים",
     "openLog": "פתח לוג",
-    "openFolder": "תיקיית Agent"
+    "openFolder": "תיקיית Agent",
+    "rawDebugOn": "● דיבוג RAW פעיל — לחץ לעצור",
+    "rawDebugOff": "הפעל דיבוג RAW (ייצוא גולמי)"
   },
   "tips": {
     "startService": "הפעל Worker שבודק את SpendWise כל 30 דקות.",

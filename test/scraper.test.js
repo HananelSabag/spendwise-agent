@@ -39,6 +39,20 @@ test('mapAccounts preserves card purchase and statement dates separately', () =>
   assert.equal(account.txns[0].status, 'completed');
 });
 
+test('mapAccounts preserves provider memo as bank notes', () => {
+  const [account] = mapAccounts('leumi', [{
+    accountNumber: '1234',
+    txns: [{
+      chargedAmount: 13327.75,
+      date: '2026-07-08T21:00:00.000Z',
+      description: 'Salary transfer',
+      memo: 'Monthly salary',
+    }],
+  }]);
+
+  assert.equal(account.txns[0].notes, 'Monthly salary');
+});
+
 test('mapAccounts ignores invalid processed dates and unknown statuses', () => {
   const raw = [{
     accountNumber: 'x',

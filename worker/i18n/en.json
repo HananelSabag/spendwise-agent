@@ -11,7 +11,7 @@
     "subtitle": "Local sync agent",
     "pill": "Local and secure",
     "generalSubtitle": "Local sync agent",
-    "defaultSubtitle": "Official sync host",
+    "defaultSubtitle": "Private sync · this computer",
     "generalPill": "Local and secure",
     "defaultPill": "Default host"
   },
@@ -44,7 +44,8 @@
     "now": "working now",
     "hintStopped": "Start the Worker so it checks SpendWise every 30 minutes.",
     "hintRunning": "The Worker is running in the background and checks sync requests every 30 minutes.",
-    "hintBusy": "The Worker is working now. If a browser opens, keep it open."
+    "hintBusy": "The Worker is working now. If a browser opens, keep it open.",
+    "hintBusyElapsed": "Working for {0} · live status from the agent"
   },
   "result": {
     "notRunYet": "No check has run yet",
@@ -61,8 +62,11 @@
     "lastContact": "Last check {0} · {1} checks this session",
     "checking": "Checking whether SpendWise sent requests...",
     "claimed": "Received {0} sync request(s)",
+    "launchingBrowser": "Starting the secure browser",
+    "browserReady": "Connected to {0} · preparing the account",
     "scraping": "Syncing {0}",
     "openingBrowser": "Opening browser for {0}",
+    "saving": "Read {0} account(s) and {1} transaction(s) · saving now",
     "pausing": "Waiting {0}s before the next job",
     "cleanup": "Cleanup: {0}",
     "locked": "Another agent run is already active",
@@ -87,10 +91,12 @@
   "buttons": {
     "start": "Start Windows Worker",
     "stop": "Stop Windows Worker",
-    "runOnce": "Check & sync now",
+    "runOnce": "Check and sync now",
     "clean": "Clean stuck processes",
     "openLog": "Open log",
-    "openFolder": "Agent folder"
+    "openFolder": "Agent folder",
+    "rawDebugOn": "● RAW debug active — click to stop",
+    "rawDebugOff": "Start RAW debug export"
   },
   "tips": {
     "startService": "Start the Worker that checks SpendWise every 30 minutes.",

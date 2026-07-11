@@ -154,6 +154,12 @@ internal sealed class WorkerForm : Form
     private readonly Color _amber = Color.FromArgb(245, 158, 11);
     private readonly Color _cyan = Color.FromArgb(6, 182, 212);
 
+    private Panel _header = null!;
+    private CardPanel _hostCard = null!;
+    private CardPanel _statusCard = null!;
+    private CardPanel _checksCard = null!;
+    private CardPanel _transactionsCard = null!;
+    private CardPanel _modelCard = null!;
     private Label _headerTitle = null!;
     private Label _headerSubtitle = null!;
     private Label _headerPill = null!;
@@ -192,6 +198,7 @@ internal sealed class WorkerForm : Form
     private Button _cleanButton = null!;
     private Button _logButton = null!;
     private Button _folderButton = null!;
+    private Button _debugButton = null!;
     private CheckBox _startupCheck = null!;
     private Panel _pairingOverlay = null!;
     private Label _pairingTitle = null!;
@@ -230,6 +237,26 @@ internal sealed class WorkerForm : Form
         _state = WorkerState.Load(_stateFile);
         _profile = WorkerProfile.Load(_workerDir);
         _i18n = I18n.Load(_i18nDir, _state.Language);
+
+        // The built-in host is an operator utility used every day, not an
+        // onboarding screen. Give it a quiet, welcoming light surface while
+        // leaving the distributable user worker untouched for its later pass.
+        if (_profile.IsDefaultHost)
+        {
+            _bg = Color.FromArgb(237, 240, 246);
+            _card = Color.White;
+            _card2 = Color.FromArgb(241, 243, 248);
+            _panel = Color.White;
+            _border = Color.FromArgb(222, 226, 235);
+            _text = Color.FromArgb(24, 31, 46);
+            _muted = Color.FromArgb(100, 111, 132);
+            _gray = Color.FromArgb(139, 149, 168);
+            _indigo = Color.FromArgb(79, 70, 229);
+            _indigoDeep = Color.FromArgb(79, 70, 229);
+            _green = Color.FromArgb(5, 150, 105);
+            _amber = Color.FromArgb(180, 83, 9);
+            _cyan = Color.FromArgb(8, 145, 178);
+        }
 
         _regular = AppFont(10.0f, FontStyle.Regular, "Segoe UI Variable Text", "Segoe UI");
         _bold = AppFont(10.5f, FontStyle.Bold, "Segoe UI Variable Text", "Segoe UI");
@@ -299,7 +326,7 @@ internal sealed class WorkerForm : Form
     private void BuildUi()
     {
         Text = T("app.title");
-        ClientSize = new Size(640, 930);
+        ClientSize = new Size(640, _profile.IsDefaultHost ? 710 : 980);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -308,8 +335,10 @@ internal sealed class WorkerForm : Form
         Font = _regular;
         Icon = LoadIcon();
 
-        var header = new GradientHeader(_indigoDeep, _bg, _card2) { Bounds = new Rectangle(0, 0, 640, 96) };
-        Controls.Add(header);
+        _header = _profile.IsDefaultHost
+            ? new GradientHeader(_bg, Color.FromArgb(229, 233, 243), _border) { Bounds = new Rectangle(0, 0, 640, 88) }
+            : new GradientHeader(_indigoDeep, _bg, _card2) { Bounds = new Rectangle(0, 0, 640, 96) };
+        Controls.Add(_header);
 
         _logo = new PictureBox
         {
@@ -318,31 +347,36 @@ internal sealed class WorkerForm : Form
             BackColor = Color.Transparent,
             Image = LoadLogo(48)
         };
-        header.Controls.Add(_logo);
+        _header.Controls.Add(_logo);
 
-        _headerTitle = NewLabel(T("app.title"), _title, Color.White, new Rectangle(94, 24, 300, 28), ContentAlignment.MiddleLeft, true);
-        _headerSubtitle = NewLabel(T("header.subtitle"), _small, Color.FromArgb(199, 210, 254), new Rectangle(96, 56, 320, 20), ContentAlignment.MiddleLeft, true);
-        header.Controls.Add(_headerTitle);
-        header.Controls.Add(_headerSubtitle);
+        _headerTitle = NewLabel(T("app.title"), _title, _profile.IsDefaultHost ? _text : Color.White, new Rectangle(94, 24, 300, 28), ContentAlignment.MiddleLeft, true);
+        _headerSubtitle = NewLabel(T("header.subtitle"), _small, _profile.IsDefaultHost ? _muted : Color.FromArgb(199, 210, 254), new Rectangle(96, 56, 320, 20), ContentAlignment.MiddleLeft, true);
+        _header.Controls.Add(_headerTitle);
+        _header.Controls.Add(_headerSubtitle);
 
-        _languageButton = NewButton(T("meta.toggle"), new Rectangle(536, 18, 76, 28), _panel, Color.White, _pillFont);
+        _languageButton = NewButton(
+            T("meta.toggle"),
+            new Rectangle(536, 18, 76, 28),
+            _profile.IsDefaultHost ? _card : _panel,
+            _profile.IsDefaultHost ? _text : Color.White,
+            _pillFont);
         _languageButton.FlatAppearance.BorderSize = 1;
-        _languageButton.FlatAppearance.BorderColor = Color.FromArgb(129, 140, 248);
-        header.Controls.Add(_languageButton);
+        _languageButton.FlatAppearance.BorderColor = _profile.IsDefaultHost ? _border : Color.FromArgb(129, 140, 248);
+        _header.Controls.Add(_languageButton);
 
         _headerPill = Pill(T("header.pill"), new Rectangle(454, 56, 158, 26), Color.White, Color.FromArgb(34, 197, 94));
-        header.Controls.Add(_headerPill);
+        _header.Controls.Add(_headerPill);
 
-        var hostCard = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 112, 592, 112) };
-        Controls.Add(hostCard);
+        _hostCard = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 112, 592, 112) };
+        Controls.Add(_hostCard);
         _hostTitle = NewLabel("", _bold, _text, new Rectangle(24, 18, 360, 24), ContentAlignment.MiddleLeft);
         _hostBody = NewLabel("", _regular, _muted, new Rectangle(24, 48, 420, 40), ContentAlignment.TopLeft);
         _hostNote = NewLabel("", _small, _gray, new Rectangle(24, 88, 520, 18), ContentAlignment.MiddleLeft);
         _hostBadge = Pill("", new Rectangle(424, 18, 144, 28), Color.White, _indigo);
-        hostCard.Controls.AddRange(new Control[] { _hostTitle, _hostBody, _hostNote, _hostBadge });
+        _hostCard.Controls.AddRange(new Control[] { _hostTitle, _hostBody, _hostNote, _hostBadge });
 
-        var statusCard = new CardPanel(_card, _border) { Bounds = new Rectangle(24, 240, 592, 118) };
-        Controls.Add(statusCard);
+        _statusCard = new CardPanel(_card, _border) { Bounds = new Rectangle(24, 240, 592, 118) };
+        Controls.Add(_statusCard);
         _dot = NewLabel("\u25CF", new Font("Segoe UI", 15, FontStyle.Regular), _gray, new Rectangle(18, 13, 22, 24), ContentAlignment.MiddleCenter);
         _dot.AutoEllipsis = false;
         _statusText = NewLabel(T("status.stopped"), _bold, _text, new Rectangle(44, 17, 172, 22), ContentAlignment.MiddleLeft);
@@ -350,28 +384,28 @@ internal sealed class WorkerForm : Form
         _lastResult = NewLabel(T("result.notRunYet"), _regular, _muted, new Rectangle(44, 51, 500, 24), ContentAlignment.MiddleLeft);
         _lastRun = NewLabel("", _small, _gray, new Rectangle(44, 77, 500, 18), ContentAlignment.MiddleLeft);
         _statusHint = NewLabel(T("status.hintStopped"), _small, _gray, new Rectangle(44, 97, 500, 18), ContentAlignment.MiddleLeft);
-        statusCard.Controls.AddRange(new Control[] { _dot, _statusText, _nextRun, _lastResult, _lastRun, _statusHint });
+        _statusCard.Controls.AddRange(new Control[] { _dot, _statusText, _nextRun, _lastResult, _lastRun, _statusHint });
 
-        var checks = StatCard(new Rectangle(24, 374, 286, 78), _indigo, out _checksNumber, out _checksLabel);
-        var txns = StatCard(new Rectangle(330, 374, 286, 78), _green, out _transactionsNumber, out _transactionsLabel);
-        Controls.Add(checks);
-        Controls.Add(txns);
+        _checksCard = StatCard(new Rectangle(24, 374, 286, 78), _indigo, out _checksNumber, out _checksLabel);
+        _transactionsCard = StatCard(new Rectangle(330, 374, 286, 78), _green, out _transactionsNumber, out _transactionsLabel);
+        Controls.Add(_checksCard);
+        Controls.Add(_transactionsCard);
         _checksNumber.Text = _state.TotalRuns.ToString(CultureInfo.InvariantCulture);
         _transactionsNumber.Text = GetSyncTotals().newTxns.ToString(CultureInfo.InvariantCulture);
 
-        var model = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 468, 592, 218) };
-        Controls.Add(model);
+        _modelCard = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 468, 592, 218) };
+        Controls.Add(_modelCard);
         _modelTitle = NewLabel(T("model.title"), _bold, _text, new Rectangle(22, 16, 340, 24), ContentAlignment.MiddleLeft);
         _keyPill = Pill("", new Rectangle(392, 14, 174, 26), Color.White, _green);
-        model.Controls.AddRange(new Control[] { _modelTitle, _keyPill });
+        _modelCard.Controls.AddRange(new Control[] { _modelTitle, _keyPill });
 
-        AddInfoLine(model, 52, _green, out _runMark, out _runTitle, out _runBody);
-        AddInfoLine(model, 98, _cyan, out _handoffMark, out _handoffTitle, out _handoffBody);
-        AddInfoLine(model, 144, _amber, out _reportMark, out _reportTitle, out _reportBody);
+        AddInfoLine(_modelCard, 52, _green, out _runMark, out _runTitle, out _runBody);
+        AddInfoLine(_modelCard, 98, _cyan, out _handoffMark, out _handoffTitle, out _handoffBody);
+        AddInfoLine(_modelCard, 144, _amber, out _reportMark, out _reportTitle, out _reportBody);
         _apiPill = Pill("", new Rectangle(22, 184, 210, 26), Color.White, _cyan);
         _banksPill = Pill(T("model.banksCards"), new Rectangle(244, 184, 156, 26), Color.White, _indigo);
         _freqPill = Pill(T("model.frequency"), new Rectangle(412, 184, 112, 26), Color.White, _amber);
-        model.Controls.AddRange(new Control[] { _apiPill, _banksPill, _freqPill });
+        _modelCard.Controls.AddRange(new Control[] { _apiPill, _banksPill, _freqPill });
 
         _mainButton = NewButton(T("buttons.start"), new Rectangle(24, 704, 592, 48), _indigo, Color.White, _bold);
         _runButton = NewButton(T("buttons.runOnce"), new Rectangle(24, 768, 286, 38), _card2, _text, _regular);
@@ -381,7 +415,10 @@ internal sealed class WorkerForm : Form
         SetButtonBorder(_logButton, _border, 1);
         _folderButton = NewButton(T("buttons.openFolder"), new Rectangle(330, 818, 286, 34), _panel, _text, _small);
         SetButtonBorder(_folderButton, _border, 1);
-        Controls.AddRange(new Control[] { _mainButton, _runButton, _cleanButton, _logButton, _folderButton });
+        _debugButton = NewButton("", new Rectangle(24, 928, 592, 40), _card2, _text, _regular);
+        SetButtonBorder(_debugButton, _border, 1);
+        UpdateDebugButton();
+        Controls.AddRange(new Control[] { _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _debugButton });
 
         _startupCheck = new CheckBox
         {
@@ -420,6 +457,7 @@ internal sealed class WorkerForm : Form
         _cleanButton.Click += (_, _) => CleanStuckProcesses();
         _logButton.Click += (_, _) => OpenLog();
         _folderButton.Click += (_, _) => OpenAgentFolder();
+        _debugButton.Click += (_, _) => ToggleRawDebug();
         _startupCheck.Click += (_, _) => SetStartup(_startupCheck.Checked);
         _miOpen.Click += (_, _) => ShowFromTray();
         _miRun.Click += (_, _) => InvokeAgentRun();
@@ -429,6 +467,47 @@ internal sealed class WorkerForm : Form
         FormClosing += OnFormClosing;
 
         BuildPairingOverlay();
+        if (_profile.IsDefaultHost) ApplyDefaultHostLayout();
+    }
+
+    private void ApplyDefaultHostLayout()
+    {
+        _hostCard.Visible = false;
+        _modelCard.Visible = false;
+        _headerPill.Visible = false;
+
+        _statusCard.Bounds = new Rectangle(24, 108, 592, 154);
+        _statusCard.Radius = 16;
+        _checksCard.Bounds = new Rectangle(24, 278, 286, 86);
+        _transactionsCard.Bounds = new Rectangle(330, 278, 286, 86);
+        _checksCard.Radius = 14;
+        _transactionsCard.Radius = 14;
+        _checksCard.Accent = null;
+        _transactionsCard.Accent = null;
+
+        _mainButton.Bounds = new Rectangle(24, 382, 592, 50);
+        _runButton.Bounds = new Rectangle(24, 448, 286, 40);
+        _cleanButton.Bounds = new Rectangle(330, 448, 286, 40);
+        _logButton.Bounds = new Rectangle(24, 502, 286, 36);
+        _folderButton.Bounds = new Rectangle(330, 502, 286, 36);
+        _debugButton.Bounds = new Rectangle(24, 556, 592, 42);
+        _startupCheck.Bounds = new Rectangle(25, 620, 286, 24);
+        _footer.Bounds = new Rectangle(330, 620, 286, 24);
+        _intervalLabel.Bounds = new Rectangle(24, 652, 592, 28);
+
+        foreach (var button in new[] { _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _debugButton })
+        {
+            if (button is RoundedButton rounded) rounded.Radius = 12;
+        }
+
+        var quietBorder = Color.FromArgb(196, 203, 216);
+        SetButtonBorder(_mainButton, Color.FromArgb(67, 56, 202), 1);
+        SetButtonBorder(_runButton, quietBorder, 1);
+        SetButtonBorder(_cleanButton, quietBorder, 1);
+        SetButtonBorder(_logButton, quietBorder, 1);
+        SetButtonBorder(_folderButton, quietBorder, 1);
+        SetButtonBorder(_languageButton, quietBorder, 1);
+        UpdateDebugButton();
     }
 
     // ── Pairing (General Worker, before the device is connected) ───────────
@@ -747,7 +826,8 @@ internal sealed class WorkerForm : Form
         _pulseTimer.Tick += (_, _) => PulseTick();
         _pulseTimer.Start();
 
-        _refreshTimer.Interval = 10 * 1000;
+        // The log is local and cheap to read; this keeps real stages responsive.
+        _refreshTimer.Interval = 2 * 1000;
         _refreshTimer.Tick += (_, _) => RefreshSnapshot();
         _refreshTimer.Start();
     }
@@ -784,7 +864,7 @@ internal sealed class WorkerForm : Form
         _footer.RightToLeft = RightToLeft.No;
         LayoutStatusHeader(he, right);
         _startupCheck.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
-        foreach (var control in new Control[] { _languageButton, _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _headerPill, _hostBadge, _keyPill, _apiPill, _banksPill, _freqPill })
+        foreach (var control in new Control[] { _languageButton, _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _debugButton, _headerPill, _hostBadge, _keyPill, _apiPill, _banksPill, _freqPill })
         {
             control.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
         }
@@ -809,6 +889,7 @@ internal sealed class WorkerForm : Form
         _cleanButton.Text = T("buttons.clean");
         _logButton.Text = T("buttons.openLog");
         _folderButton.Text = T("buttons.openFolder");
+        UpdateDebugButton();
         _startupCheck.Text = T("startup.label");
         _intervalLabel.Text = string.Format(T("startup.interval"), IntervalMinutes, MaxRunMinutes);
         _footer.Text = string.Format(T("footer"), _buildVersion);
@@ -830,6 +911,20 @@ internal sealed class WorkerForm : Form
 
     private void LayoutHeader(bool he)
     {
+        if (_profile.IsDefaultHost)
+        {
+            _headerPill.Visible = false;
+            _logo.Bounds = he ? new Rectangle(564, 20, 44, 44) : new Rectangle(28, 20, 44, 44);
+            _headerTitle.Bounds = he ? new Rectangle(194, 16, 354, 28) : new Rectangle(86, 16, 360, 28);
+            _headerSubtitle.Bounds = he ? new Rectangle(194, 45, 354, 20) : new Rectangle(88, 45, 360, 20);
+            _languageButton.Bounds = he ? new Rectangle(28, 25, 82, 32) : new Rectangle(530, 25, 82, 32);
+            _headerTitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+            _headerSubtitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+            _headerTitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+            _headerSubtitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+            return;
+        }
+
         if (he)
         {
             _logo.Bounds = new Rectangle(564, 24, 48, 48);
@@ -1093,7 +1188,16 @@ internal sealed class WorkerForm : Form
         if (_statusHint is null) return;
         if (_busy)
         {
-            _statusHint.Text = T("status.hintBusy");
+            if (_runStartedAt is not null)
+            {
+                var elapsed = DateTime.Now - _runStartedAt.Value;
+                var elapsedText = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}";
+                _statusHint.Text = string.Format(T("status.hintBusyElapsed"), elapsedText);
+            }
+            else
+            {
+                _statusHint.Text = T("status.hintBusy");
+            }
             return;
         }
 
@@ -1118,7 +1222,7 @@ internal sealed class WorkerForm : Form
     private void RefreshRunProgress()
     {
         var snapshot = ReadLogSnapshot();
-        if (snapshot.Kind is LogEventKind.Claimed or LogEventKind.Scraping or LogEventKind.Warmup or LogEventKind.Pausing or LogEventKind.Done)
+        if (snapshot.Kind is LogEventKind.Claimed or LogEventKind.LaunchingBrowser or LogEventKind.BrowserReady or LogEventKind.Scraping or LogEventKind.Scraped or LogEventKind.Warmup or LogEventKind.Pausing or LogEventKind.Done)
         {
             SetStatus("status.syncing", _blue);
         }
@@ -1145,6 +1249,22 @@ internal sealed class WorkerForm : Form
         string[] tail;
         try { tail = File.ReadLines(_logFile).TakeLast(LogTailLines).ToArray(); }
         catch { return new LogSnapshot(LogEventKind.None); }
+
+        // During an active run, ignore stages left over from earlier runs.
+        if (_busy && _runStartedAt is not null)
+        {
+            var runStartUtc = new DateTimeOffset(_runStartedAt.Value).ToUniversalTime().AddSeconds(-1);
+            tail = tail.Where(line =>
+            {
+                var close = line.IndexOf(']');
+                if (close <= 1) return false;
+                return DateTimeOffset.TryParse(
+                    line[1..close],
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var timestamp) && timestamp >= runStartUtc;
+            }).ToArray();
+        }
 
         var recentCooldown = CountLatestCooldownDeclines(tail);
         if (recentCooldown > 0)
@@ -1208,6 +1328,17 @@ internal sealed class WorkerForm : Form
                     Count: int.Parse(claimed.Groups[1].Value, CultureInfo.InvariantCulture));
             }
 
+            if (line.Contains("[browser] launching Chrome", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LogSnapshot(LogEventKind.LaunchingBrowser);
+            }
+
+            var browserReady = Regex.Match(line, @"\[([a-z0-9_-]+)\]\s+Cloudflare clear", RegexOptions.IgnoreCase);
+            if (browserReady.Success)
+            {
+                return new LogSnapshot(LogEventKind.BrowserReady, Source: browserReady.Groups[1].Value);
+            }
+
             var scraping = Regex.Match(line, @"\[job:(\d+)\]\s+scraping\s+([a-z0-9_-]+)", RegexOptions.IgnoreCase);
             if (scraping.Success)
             {
@@ -1226,6 +1357,16 @@ internal sealed class WorkerForm : Form
                 return new LogSnapshot(
                     LogEventKind.Pausing,
                     Count: int.Parse(pausing.Groups[1].Value, CultureInfo.InvariantCulture));
+            }
+
+            var scraped = Regex.Match(line, @"\[job:(\d+)\]\s+scraped\s+(\d+) account\(s\),\s+(\d+) txn\(s\)", RegexOptions.IgnoreCase);
+            if (scraped.Success)
+            {
+                return new LogSnapshot(
+                    LogEventKind.Scraped,
+                    Count: int.Parse(scraped.Groups[2].Value, CultureInfo.InvariantCulture),
+                    NewCount: int.Parse(scraped.Groups[3].Value, CultureInfo.InvariantCulture),
+                    JobId: scraped.Groups[1].Value);
             }
         }
 
@@ -1268,12 +1409,24 @@ internal sealed class WorkerForm : Form
                 _lastResult.Text = string.Format(T("result.claimed"), snapshot.Count);
                 _lastResult.ForeColor = _blue;
                 return;
+            case LogEventKind.LaunchingBrowser:
+                _lastResult.Text = T("result.launchingBrowser");
+                _lastResult.ForeColor = _blue;
+                return;
+            case LogEventKind.BrowserReady:
+                _lastResult.Text = string.Format(T("result.browserReady"), PrettySource(snapshot.Source));
+                _lastResult.ForeColor = _blue;
+                return;
             case LogEventKind.Scraping:
                 _lastResult.Text = string.Format(T("result.scraping"), PrettySource(snapshot.Source));
                 _lastResult.ForeColor = _blue;
                 return;
             case LogEventKind.Warmup:
                 _lastResult.Text = string.Format(T("result.openingBrowser"), PrettySource(snapshot.Source));
+                _lastResult.ForeColor = _blue;
+                return;
+            case LogEventKind.Scraped:
+                _lastResult.Text = string.Format(T("result.saving"), snapshot.Count, snapshot.NewCount);
                 _lastResult.ForeColor = _blue;
                 return;
             case LogEventKind.Pausing:
@@ -1388,6 +1541,7 @@ internal sealed class WorkerForm : Form
     private void PulseTick()
     {
         if (!_running && !_busy) return;
+        if (_busy) UpdateStatusHint();
         _pulseOn = !_pulseOn;
         var baseColor = _busy ? _blue : _green;
         _dot.ForeColor = _pulseOn ? baseColor : Blend(baseColor, _card, 0.45);
@@ -1496,11 +1650,66 @@ internal sealed class WorkerForm : Form
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
 
+    // ── RAW debug toggle ──────────────────────────────────────────────────────
+    // Flips scraped-data/RAW_DEBUG. The node agent reads this file each scrape:
+    // when present it bypasses the cooldown and dumps the raw scraper output to
+    // scraped-data/raw-*.html/json. No exe rebuild needed for the node side.
+    private string RawDebugFlagPath() => Path.Combine(_agentDir, "scraped-data", "RAW_DEBUG");
+
+    private void ToggleRawDebug()
+    {
+        try
+        {
+            var flag = RawDebugFlagPath();
+            if (File.Exists(flag))
+            {
+                File.Delete(flag);
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
+                File.WriteAllText(flag, "on");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendWorkerLog("toggle raw debug failed: " + ex.Message);
+        }
+        UpdateDebugButton();
+    }
+
+    private void UpdateDebugButton()
+    {
+        bool on = false;
+        try { on = File.Exists(RawDebugFlagPath()); } catch { }
+        _debugButton.Text = T(on ? "buttons.rawDebugOn" : "buttons.rawDebugOff");
+        if (_profile.IsDefaultHost)
+        {
+            _debugButton.ForeColor = on ? _amber : _muted;
+            _debugButton.BackColor = on ? Color.FromArgb(255, 247, 237) : _card2;
+            SetButtonBorder(_debugButton, on ? Color.FromArgb(253, 186, 116) : _border, 1);
+            return;
+        }
+
+        _debugButton.ForeColor = on ? Color.White : _text;
+        _debugButton.BackColor = on ? Color.FromArgb(202, 138, 4) : _card2;
+    }
+
     private void StartWorker()
     {
         _running = true;
         _mainButton.Text = T("buttons.stop");
-        _mainButton.BackColor = _card2;
+        if (_profile.IsDefaultHost)
+        {
+            _mainButton.BackColor = Color.FromArgb(226, 229, 238);
+            _mainButton.ForeColor = _text;
+            if (_mainButton is RoundedButton rounded) rounded.HoverBackColor = Color.FromArgb(216, 220, 231);
+            SetButtonBorder(_mainButton, Color.FromArgb(177, 185, 201), 1);
+        }
+        else
+        {
+            _mainButton.BackColor = _card2;
+        }
         SetStatus("status.running", _green);
         _nextRunAt = DateTime.Now.AddMinutes(IntervalMinutes);
         UpdateNextRun();
@@ -1516,6 +1725,12 @@ internal sealed class WorkerForm : Form
         UpdateNextRun();
         _mainButton.Text = T("buttons.start");
         _mainButton.BackColor = _indigo;
+        _mainButton.ForeColor = Color.White;
+        if (_profile.IsDefaultHost)
+        {
+            if (_mainButton is RoundedButton rounded) rounded.HoverBackColor = ControlPaint.Light(_indigo, 0.08f);
+            SetButtonBorder(_mainButton, Color.FromArgb(67, 56, 202), 1);
+        }
         if (_busy)
         {
             _lastResult.Text = T("result.stoppedAfterCurrent");
@@ -1717,7 +1932,10 @@ internal enum LogEventKind
     Locked,
     Duplicate,
     Claimed,
+    LaunchingBrowser,
+    BrowserReady,
     Scraping,
+    Scraped,
     Warmup,
     Pausing,
     Cooldown

@@ -115,6 +115,12 @@ export function mapAccounts(source, rawAccounts) {
         description: String(txn.description || '').trim(),
         charged_amount: amount,
       };
+      // The provider memo often carries the useful human detail that the
+      // short description omits (salary marker, transfer recipient, charge
+      // explanation). Preserve it as bank-provided notes; the server keeps
+      // this separate from the transaction identity used for dedup.
+      const memo = String(txn.memo ?? '').trim();
+      mapped.notes = memo || '';
       // Credit companies expose two different dates: `date` is when the
       // purchase happened, while `processedDate` is when CAL/Max/Isracard
       // actually debit the card statement. SpendWise needs both: purchase
