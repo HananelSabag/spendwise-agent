@@ -40,7 +40,7 @@ export function scrapeWindowStart() {
  * never on credential errors, which would look like a brute-force attempt
  * to the bank and risk locking the account.
  */
-export async function scrapeBank(source, credentials, browser, fromDate = scrapeWindowStart()) {
+export async function scrapeBank(source, credentials, browser, fromDate = scrapeWindowStart(), rawScope = '') {
   const meta = assertKnownBank(source);
   const log = logger(source);
 
@@ -82,7 +82,7 @@ export async function scrapeBank(source, credentials, browser, fromDate = scrape
   // drop exactly what the scraper returned before we map anything.
   if (rawDebugEnabled()) {
     try {
-      const file = writeRawScrape(source, accounts);
+      const file = writeRawScrape(source, accounts, rawScope);
       log.info(`RAW debug report → ${file}`);
     } catch (e) {
       log.warn(`raw report write failed: ${e.message}`);

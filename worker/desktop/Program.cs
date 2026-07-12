@@ -1512,11 +1512,26 @@ internal sealed class WorkerForm : Form
     private void WatchdogTick()
     {
         if (!_busy || _runStartedAt is null) return;
-        if ((DateTime.Now - _runStartedAt.Value).TotalMinutes < MaxRunMinutes) return;
+
+        // A multi-bank batch can legitimately run longer than six minutes when
+        // one provider retries and the agent pauses between institutions. Treat
+        // fresh log output as progress; only kill a process that has been silent
+        // for the full watchdog window.
+        var lastActivity = _runStartedAt.Value;
+        try
+        {
+            if (File.Exists(_logFile))
+            {
+                var logWrite = File.GetLastWriteTime(_logFile);
+                if (logWrite > lastActivity) lastActivity = logWrite;
+            }
+        }
+        catch { }
+        if ((DateTime.Now - lastActivity).TotalMinutes < MaxRunMinutes) return;
 
         var killed = KillCurrentTree();
         RemoveAgentLock();
-        AppendWorkerLog($"watchdog cancelled a stuck sync after {MaxRunMinutes} minutes; killed={killed}");
+        AppendWorkerLog($"watchdog cancelled a sync silent for {MaxRunMinutes} minutes; killed={killed}");
         _busy = false;
         _currentProc = null;
         _runStartedAt = null;

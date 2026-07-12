@@ -48,7 +48,9 @@ async function processJob(job, browser, privateKey) {
   if (BANKS[source].warmupUrl) await warmup(browser, BANKS[source].warmupUrl, source);
 
   jlog.info(`scraping ${source} (user ${job.user_id})`);
-  const rawAccounts = await scrapeBank(source, credentials, browser);
+  // Default Host serves more than one user. Scope diagnostic RAW files so a
+  // later scrape of the same provider cannot overwrite another user's audit.
+  const rawAccounts = await scrapeBank(source, credentials, browser, undefined, `user-${job.user_id}`);
   credentials = null; // drop the plaintext reference the moment it's not needed
 
   saveScrape(source, rawAccounts);

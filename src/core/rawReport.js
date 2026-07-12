@@ -90,9 +90,11 @@ ${body}
 }
 
 /** Write one source's raw scrape (JSON + single-bank HTML) to scraped-data/. */
-export function writeRawScrape(source, accounts) {
+export function writeRawScrape(source, accounts, scope = '') {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(path.join(DATA_DIR, `raw-${source}.json`), JSON.stringify(accounts ?? [], null, 2), 'utf8');
-  fs.writeFileSync(path.join(DATA_DIR, `raw-${source}.html`), renderReportHtml([{ source, accounts }]), 'utf8');
-  return path.join(DATA_DIR, `raw-${source}.html`);
+  const safeScope = String(scope).replace(/[^a-z0-9_-]/gi, '');
+  const basename = `raw-${source}${safeScope ? `-${safeScope}` : ''}`;
+  fs.writeFileSync(path.join(DATA_DIR, `${basename}.json`), JSON.stringify(accounts ?? [], null, 2), 'utf8');
+  fs.writeFileSync(path.join(DATA_DIR, `${basename}.html`), renderReportHtml([{ source, accounts }]), 'utf8');
+  return path.join(DATA_DIR, `${basename}.html`);
 }
