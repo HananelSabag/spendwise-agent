@@ -95,6 +95,24 @@ test('mapAccounts uses the original ILS amount for a zero-valued pending MAX aut
   assert.equal(account.txns[0].status, 'pending');
 });
 
+test('mapAccounts uses the original ILS amount for a zero-valued completed CAL row', () => {
+  const [account] = mapAccounts('visa_cal', [{
+    accountNumber: '9962',
+    txns: [{
+      chargedAmount: 0,
+      originalAmount: -48,
+      originalCurrency: '₪',
+      date: '2026-06-03T09:06:35.000Z',
+      description: 'Completed purchase',
+      status: 'completed',
+      identifier: 'cal-48',
+    }],
+  }]);
+
+  assert.equal(account.txns[0].charged_amount, -48);
+  assert.equal(account.txns[0].status, 'completed');
+});
+
 test('mapAccounts does not treat a foreign pending amount as converted ILS', () => {
   const [account] = mapAccounts('max', [{
     accountNumber: '2254',

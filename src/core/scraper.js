@@ -112,14 +112,14 @@ export function mapAccounts(source, rawAccounts) {
       const status = txn.status === 'pending' || txn.status === 'completed'
         ? txn.status
         : null;
-      // MAX reports pending ILS authorizations with chargedAmount=0 and the
-      // real provider amount in originalAmount. Preserve that factual amount.
-      const pendingIlsFallback = status === 'pending'
-        && chargedAmount === 0
+      // MAX pending authorizations and some completed CAL rows arrive with
+      // chargedAmount=0 while originalAmount carries the real ILS amount.
+      // Preserve that provider fact; never apply this fallback to foreign FX.
+      const providerIlsFallback = chargedAmount === 0
         && Number.isFinite(originalAmount)
         && originalAmount !== 0
         && ['ILS', 'NIS', '₪'].includes(originalCurrency.toUpperCase());
-      const amount = pendingIlsFallback ? originalAmount : chargedAmount;
+      const amount = providerIlsFallback ? originalAmount : chargedAmount;
       const date = txn.date ? new Date(txn.date) : null;
       // A transaction without a finite amount or valid date is garbage —
       // dropping it here beats corrupting the ledger downstream.
