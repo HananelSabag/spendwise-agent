@@ -76,6 +76,41 @@ test('mapAccounts preserves FX, transaction kind, and installment metadata', () 
   assert.equal(account.txns[0].installment_total, 10);
 });
 
+test('mapAccounts uses the original ILS amount for a zero-valued pending MAX authorization', () => {
+  const [account] = mapAccounts('max', [{
+    accountNumber: '2254',
+    txns: [{
+      chargedAmount: 0,
+      originalAmount: -384.95,
+      originalCurrency: 'ILS',
+      date: '2026-07-11T18:57:00.000Z',
+      description: 'Pending purchase',
+      status: 'pending',
+      identifier: null,
+    }],
+  }]);
+
+  assert.equal(account.txns[0].charged_amount, -384.95);
+  assert.equal(account.txns[0].original_amount, -384.95);
+  assert.equal(account.txns[0].status, 'pending');
+});
+
+test('mapAccounts does not treat a foreign pending amount as converted ILS', () => {
+  const [account] = mapAccounts('max', [{
+    accountNumber: '2254',
+    txns: [{
+      chargedAmount: 0,
+      originalAmount: -20,
+      originalCurrency: 'USD',
+      date: '2026-07-11T18:57:00.000Z',
+      description: 'Pending foreign purchase',
+      status: 'pending',
+    }],
+  }]);
+
+  assert.equal(account.txns[0].charged_amount, 0);
+});
+
 test('mapAccounts extracts installment position from provider memo fallback', () => {
   const [account] = mapAccounts('max', [{
     accountNumber: '2254',

@@ -27,11 +27,15 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** How far back to scrape. BACKFILL_MONTHS overrides for one-off backfills. */
+/**
+ * How far back to scrape. Three months keeps the previous calendar month
+ * complete even when a user connects halfway through the current month.
+ * BACKFILL_MONTHS can still override this for an explicit diagnostic run.
+ */
 export function scrapeWindowStart() {
   const d = new Date();
-  const monthsBack = parseInt(process.env.BACKFILL_MONTHS || '1', 10);
-  d.setMonth(d.getMonth() - (Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 1));
+  const monthsBack = parseInt(process.env.BACKFILL_MONTHS || '3', 10);
+  d.setMonth(d.getMonth() - (Number.isFinite(monthsBack) && monthsBack > 0 ? monthsBack : 3));
   return d;
 }
 
@@ -102,7 +106,20 @@ export function mapAccounts(source, rawAccounts) {
 
   const accounts = rawAccounts.map((account) => {
     const txns = (account.txns || []).flatMap((txn) => {
-      const amount = Number(txn.chargedAmount);
+      const chargedAmount = Number(txn.chargedAmount);
+      const originalAmount = Number(txn.originalAmount);
+      const originalCurrency = String(txn.originalCurrency ?? '').trim();
+      const status = txn.status === 'pending' || txn.status === 'completed'
+        ? txn.status
+        : null;
+      // MAX reports pending ILS authorizations with chargedAmount=0 and the
+      // real provider amount in originalAmount. Preserve that factual amount.
+      const pendingIlsFallback = status === 'pending'
+        && chargedAmount === 0
+        && Number.isFinite(originalAmount)
+        && originalAmount !== 0
+        && ['ILS', 'NIS', '₪'].includes(originalCurrency.toUpperCase());
+      const amount = pendingIlsFallback ? originalAmount : chargedAmount;
       const date = txn.date ? new Date(txn.date) : null;
       // A transaction without a finite amount or valid date is garbage —
       // dropping it here beats corrupting the ledger downstream.
@@ -121,9 +138,7 @@ export function mapAccounts(source, rawAccounts) {
       // this separate from the transaction identity used for dedup.
       const memo = String(txn.memo ?? '').trim();
       mapped.notes = memo || '';
-      const originalAmount = Number(txn.originalAmount);
       if (Number.isFinite(originalAmount)) mapped.original_amount = originalAmount;
-      const originalCurrency = String(txn.originalCurrency ?? '').trim();
       if (originalCurrency) mapped.original_currency = originalCurrency;
       const chargedCurrency = String(txn.chargedCurrency ?? '').trim();
       if (chargedCurrency) mapped.charged_currency = chargedCurrency;
@@ -161,9 +176,7 @@ export function mapAccounts(source, rawAccounts) {
           mapped.processed_date = processedDate.toISOString();
         }
       }
-      if (txn.status === 'pending' || txn.status === 'completed') {
-        mapped.status = txn.status;
-      }
+      if (status) mapped.status = status;
       if (txn.identifier !== undefined && txn.identifier !== null) {
         mapped.identifier = String(txn.identifier);
       }
