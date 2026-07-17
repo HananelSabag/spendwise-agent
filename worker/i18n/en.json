@@ -10,7 +10,9 @@
   "header": {
     "subtitle": "Local sync agent",
     "pill": "Local and secure",
-    "generalSubtitle": "Your private sync · this computer",
+    "generalSubtitle": "Secure connection to your SpendWise account",
+    "generalConnected": "Connected to your SpendWise account · this computer",
+    "generalSubtitleNamed": "Hi {0} · connected to your SpendWise account",
     "defaultSubtitle": "Hananel's Default Worker · admin host",
     "generalPill": "Local and secure",
     "defaultPill": "Default host"
@@ -36,6 +38,10 @@
   "status": {
     "stopped": "Worker off",
     "running": "Worker running",
+    "personalStopped": "Automatic sync is off",
+    "personalRunning": "Automatic sync is active",
+    "personalChecking": "Checking sync requests",
+    "personalSyncing": "Syncing now",
     "idle": "Ready",
     "checking": "Checking requests",
     "syncing": "Syncing now",
@@ -45,7 +51,11 @@
     "hintStopped": "Start the Worker so it checks SpendWise every 30 minutes.",
     "hintRunning": "The Worker is running in the background and checks sync requests every 30 minutes.",
     "hintBusy": "The Worker is working now. If a browser opens, keep it open.",
-    "hintBusyElapsed": "Working for {0} · live status from the agent"
+    "hintBusyElapsed": "Working for {0} · live status from the agent",
+    "personalHintStopped": "Start automatic sync so this computer checks for new requests.",
+    "personalHintRunning": "Sync is active in the background; you can close this window and carry on.",
+    "personalHintBusy": "A sync is running now. If a browser opens, keep it open.",
+    "personalHintBusyElapsed": "Syncing for {0}"
   },
   "result": {
     "notRunYet": "No check has run yet",
@@ -95,6 +105,9 @@
     "clean": "Clean stuck processes",
     "openLog": "Open log",
     "openFolder": "Agent folder",
+    "personalStart": "Start automatic sync",
+    "personalStop": "Pause automatic sync",
+    "personalRunOnce": "Check and sync now",
     "rawDebugOn": "● RAW debug active — click to stop",
     "rawDebugOff": "Start RAW debug export"
   },
@@ -104,11 +117,15 @@
     "checkNow": "One-time check: if a sync request is allowed to run, the Worker syncs now.",
     "clean": "Kill stuck agent or browser processes and remove a stale lock.",
     "openLog": "Open agent.log.",
-    "openFolder": "Open the agent folder."
+    "openFolder": "Open the agent folder.",
+    "personalStartService": "Start automatic checks for your own sync requests.",
+    "personalStopService": "Pause future automatic checks. An active sync will finish normally.",
+    "personalCheckNow": "Check now for a sync request in your SpendWise account."
   },
   "startup": {
     "label": "Launch automatically with Windows",
-    "interval": "The Worker checks SpendWise every {0} minutes. A stuck run is cancelled after {1} minutes."
+    "interval": "The Worker checks SpendWise every {0} minutes. A stuck run is cancelled after {1} minutes.",
+    "personalInterval": "SpendWise checks for your sync requests from this computer every {0} minutes."
   },
   "cleanup": {
     "none": "Nothing to clean.",
@@ -126,15 +143,18 @@
     "stuckBody": "A sync got stuck and was cancelled after {0} minutes."
   },
   "pairing": {
-    "title": "Connect to your SpendWise account",
-    "body": "In SpendWise, open Bank Sync → Agent, choose ‘My own computer’, and copy the 8-character code here.",
+    "title": "Your computer is almost connected",
+    "body": "Paste the code shown in SpendWise under Bank Sync → Agent → ‘My own computer’.",
     "codeLabel": "Pairing code",
     "button": "Connect",
     "working": "Connecting...",
     "success": "Connected! Starting the dashboard...",
     "errorFormat": "Enter the 8-character code from SpendWise",
     "errorGeneric": "Couldn't connect — check the code and try again",
-    "help": "Private by design · your bank credentials are decrypted only on this computer."
+    "help": "This is a one-time code. After pairing, only this computer runs your syncs."
   },
-  "footer": "SpendWise · Hananel Sabag · build {0}"
+  "footer": {
+    "default": "SpendWise · Hananel Sabag · build {0}",
+    "personal": "SpendWise · your private sync · build {0}"
+  }
 }

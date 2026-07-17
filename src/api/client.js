@@ -59,6 +59,11 @@ export async function claimJobs(limit = 5) {
   return jobs;
 }
 
+/** Safe display identity for an already-paired personal Worker. */
+export function fetchDeviceProfile() {
+  return request('GET', '/agent-pairing/device-profile');
+}
+
 /** Report a successful scrape (accounts payload) for a job. */
 export function reportSuccess(jobId, accounts) {
   return request('POST', `/bank-agent/jobs/${jobId}/result`, { success: true, accounts });

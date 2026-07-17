@@ -10,7 +10,9 @@
   "header": {
     "subtitle": "סוכן סנכרון מקומי",
     "pill": "מקומי ומאובטח",
-    "generalSubtitle": "הסנכרון הפרטי שלך · המחשב הזה",
+    "generalSubtitle": "חיבור מאובטח לחשבון SpendWise שלך",
+    "generalConnected": "מחובר לחשבון SpendWise שלך · המחשב הזה",
+    "generalSubtitleNamed": "שלום {0} · מחובר לחשבון SpendWise שלך",
     "defaultSubtitle": "ה־Default Worker של חננאל · עמדת מנהל",
     "generalPill": "מקומי ומאובטח",
     "defaultPill": "Default Host"
@@ -36,6 +38,10 @@
   "status": {
     "stopped": "Worker כבוי",
     "running": "Worker רץ",
+    "personalStopped": "הסנכרון האוטומטי כבוי",
+    "personalRunning": "הסנכרון האוטומטי פעיל",
+    "personalChecking": "בודק בקשות סנכרון",
+    "personalSyncing": "מסנכרן עכשיו",
     "idle": "מוכן",
     "checking": "בודק בקשות",
     "syncing": "מסנכרן עכשיו",
@@ -45,7 +51,11 @@
     "hintStopped": "הפעל את ה-Worker כדי שיבדוק את SpendWise כל 30 דקות.",
     "hintRunning": "ה-Worker רץ ברקע ובודק בקשות סנכרון כל 30 דקות.",
     "hintBusy": "ה-Worker עובד עכשיו. אם נפתח דפדפן, לא לסגור אותו.",
-    "hintBusyElapsed": "עובד כבר {0} · סטטוס חי מה-Agent"
+    "hintBusyElapsed": "עובד כבר {0} · סטטוס חי מה-Agent",
+    "personalHintStopped": "הפעל סנכרון אוטומטי כדי שהמחשב יבדוק בקשות חדשות.",
+    "personalHintRunning": "הסנכרון פעיל ברקע; אפשר לסגור את החלון ולהמשיך כרגיל.",
+    "personalHintBusy": "הסנכרון עובד עכשיו. אם נפתח דפדפן, השאר אותו פתוח.",
+    "personalHintBusyElapsed": "הסנכרון עובד כבר {0}"
   },
   "result": {
     "notRunYet": "עדיין לא בוצעה בדיקה",
@@ -95,6 +105,9 @@
     "clean": "נקה תהליכים תקועים",
     "openLog": "פתח לוג",
     "openFolder": "תיקיית Agent",
+    "personalStart": "הפעל סנכרון אוטומטי",
+    "personalStop": "השהה סנכרון אוטומטי",
+    "personalRunOnce": "בדוק וסנכרן עכשיו",
     "rawDebugOn": "● דיבוג RAW פעיל — לחץ לעצור",
     "rawDebugOff": "הפעל דיבוג RAW (ייצוא גולמי)"
   },
@@ -104,11 +117,15 @@
     "checkNow": "בדיקה חד-פעמית: אם יש בקשת סנכרון שמותר להריץ, ה-Worker יסנכרן עכשיו.",
     "clean": "סגור תהליכי Agent או דפדפן תקועים והסר נעילה ישנה.",
     "openLog": "פתח את agent.log.",
-    "openFolder": "פתח את תיקיית ה-Agent."
+    "openFolder": "פתח את תיקיית ה-Agent.",
+    "personalStartService": "הפעל בדיקה אוטומטית של בקשות הסנכרון שלך.",
+    "personalStopService": "השהה בדיקות אוטומטיות עתידיות. סנכרון פעיל יסתיים כרגיל.",
+    "personalCheckNow": "בדוק עכשיו אם מחכה בקשת סנכרון בחשבון שלך."
   },
   "startup": {
     "label": "הפעל אוטומטית עם Windows",
-    "interval": "ה-Worker בודק את SpendWise כל {0} דקות. ריצה תקועה תבוטל אחרי {1} דקות."
+    "interval": "ה-Worker בודק את SpendWise כל {0} דקות. ריצה תקועה תבוטל אחרי {1} דקות.",
+    "personalInterval": "SpendWise יבדוק בקשות סנכרון מהמחשב הזה כל {0} דקות."
   },
   "cleanup": {
     "none": "אין מה לנקות.",
@@ -126,15 +143,18 @@
     "stuckBody": "סנכרון נתקע ובוטל אחרי {0} דקות."
   },
   "pairing": {
-    "title": "התחברות לחשבון SpendWise שלך",
-    "body": "ב־SpendWise פתח סנכרון בנקים ← Agent, בחר \"המחשב שלי\", והעתק לכאן את הקוד בן 8 התווים.",
+    "title": "עוד רגע המחשב שלך מחובר",
+    "body": "הדבק כאן את הקוד שקיבלת ב־SpendWise תחת סנכרון בנקים ← Agent ← \"המחשב שלי\".",
     "codeLabel": "קוד החיבור",
     "button": "התחבר",
     "working": "מתחבר...",
     "success": "התחברת בהצלחה! פותח את לוח הבקרה...",
     "errorFormat": "הזן את הקוד בן 8 התווים מ-SpendWise",
     "errorGeneric": "החיבור נכשל - בדוק את הקוד ונסה שוב",
-    "help": "פרטי מהיסוד · פרטי הכניסה לבנק מפוענחים רק במחשב הזה."
+    "help": "זהו קוד חד־פעמי. לאחר החיבור, רק המחשב הזה יריץ את הסנכרונים שלך."
   },
-  "footer": "SpendWise · Hananel Sabag · build {0}"
+  "footer": {
+    "default": "SpendWise · Hananel Sabag · build {0}",
+    "personal": "SpendWise · הסנכרון האישי שלך · build {0}"
+  }
 }

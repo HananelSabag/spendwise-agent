@@ -45,6 +45,8 @@ $app = Join-Path $ReleaseDir 'app'
 New-Item -ItemType Directory -Path $app, (Join-Path $app 'runtime'), (Join-Path $app 'worker'), (Join-Path $app 'chromium') -Force | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $WorkerDir 'SpendWiseWorker.exe') -Destination $ReleaseDir
+Copy-Item -LiteralPath (Join-Path $WorkerDir 'spendwise.ico') -Destination $ReleaseDir
+Copy-Item -LiteralPath (Join-Path $WorkerDir 'logo-source.png') -Destination $ReleaseDir
 Copy-Item -LiteralPath (Join-Path $WorkerDir 'START-HERE.md') -Destination $ReleaseDir
 Copy-Item -LiteralPath (Join-Path $WorkerDir 'release.env') -Destination (Join-Path $app '.env')
 Copy-Item -LiteralPath (Join-Path $RepoRoot 'package.json') -Destination $app

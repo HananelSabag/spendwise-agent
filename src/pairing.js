@@ -71,11 +71,21 @@ export async function pair(code, label = os.hostname()) {
   fs.writeFileSync(PRIVATE_KEY_FILE, util.encodeBase64(keyPair.secretKey), { mode: 0o600 });
   fs.writeFileSync(
     DEVICE_TOKEN_FILE,
-    JSON.stringify({ deviceToken: payload.device_token, label, pairedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({
+      deviceToken: payload.device_token,
+      label,
+      ownerName: typeof payload.owner_name === 'string' ? payload.owner_name.trim() : '',
+      language: payload.language === 'he' ? 'he' : payload.language === 'en' ? 'en' : '',
+      pairedAt: new Date().toISOString(),
+    }, null, 2),
     { mode: 0o600 },
   );
 
-  return { label };
+  return {
+    label,
+    ownerName: typeof payload.owner_name === 'string' ? payload.owner_name.trim() : '',
+    language: payload.language === 'he' ? 'he' : payload.language === 'en' ? 'en' : '',
+  };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

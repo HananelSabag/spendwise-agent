@@ -123,6 +123,7 @@ internal sealed class WorkerForm : Form
 
     private readonly WorkerState _state;
     private readonly WorkerProfile _profile;
+    private DeviceIdentity _deviceIdentity;
     private I18n _i18n;
     private bool _running;
     private bool _busy;
@@ -238,8 +239,12 @@ internal sealed class WorkerForm : Form
         _i18nDir = ResolveI18nDir(_workerDir, _agentDir);
         _buildVersion = ShortVersion(GetType().Assembly.GetName().Version);
 
-        _state = WorkerState.Load(_stateFile);
         _profile = WorkerProfile.Load(_workerDir);
+        _deviceIdentity = DeviceIdentity.Load(_agentDir);
+        var systemLanguage = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("he", StringComparison.OrdinalIgnoreCase)
+            ? "he"
+            : "en";
+        _state = WorkerState.Load(_stateFile, systemLanguage);
         _i18n = I18n.Load(_i18nDir, _state.Language);
 
         // One calm, modern surface for both editions. The personal edition
@@ -273,6 +278,7 @@ internal sealed class WorkerForm : Form
         ApplyLanguage();
         ParseLastResult();
         UpdatePairingVisibility();
+        if (!_profile.IsDefaultHost && IsPaired) _ = RefreshDeviceIdentityAsync();
 
         if (args.Any(a => a.Equals("--autostart", StringComparison.OrdinalIgnoreCase) ||
                           a.Equals("-AutoStart", StringComparison.OrdinalIgnoreCase) ||
@@ -468,7 +474,28 @@ internal sealed class WorkerForm : Form
         FormClosing += OnFormClosing;
 
         BuildPairingOverlay();
+        ApplyEditionLayout();
+    }
+
+    private void ApplyEditionLayout()
+    {
         ApplyCompactLayout();
+        if (_profile.IsDefaultHost) return;
+
+        // The public edition is a customer app, not an operator console.
+        // Keep the same visual language as the Default Host while exposing
+        // only the controls a person syncing their own account actually needs.
+        ClientSize = new Size(640, 590);
+        _pairingOverlay.Bounds = new Rectangle(0, 88, 640, 502);
+        _runButton.Bounds = new Rectangle(24, 448, 592, 44);
+        _cleanButton.Visible = false;
+        _logButton.Visible = false;
+        _folderButton.Visible = false;
+        _debugButton.Visible = false;
+        _startupCheck.Bounds = new Rectangle(25, 516, 286, 24);
+        _footer.Bounds = new Rectangle(330, 516, 286, 24);
+        _intervalLabel.Bounds = new Rectangle(24, 550, 592, 24);
+        _miClean.Visible = false;
     }
 
     private void ApplyCompactLayout()
@@ -582,6 +609,7 @@ internal sealed class WorkerForm : Form
         _pairingStatus.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
         _pairingHelp.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
         _pairingCodeInput.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _pairingCodeInput.TextAlign = HorizontalAlignment.Center;
     }
 
     private void UpdatePairingVisibility()
@@ -616,8 +644,7 @@ internal sealed class WorkerForm : Form
             {
                 _pairingStatus.Text = T("pairing.success");
                 _pairingStatus.ForeColor = _green;
-                UpdatePairingVisibility();
-                RefreshSnapshot();
+                AdoptPairedIdentity();
             }
             else
             {
@@ -636,6 +663,66 @@ internal sealed class WorkerForm : Form
             _pairingBusy = false;
             _pairingButton.Enabled = true;
             _pairingButton.Text = T("pairing.button");
+        }
+    }
+
+    private void AdoptPairedIdentity()
+    {
+        _deviceIdentity = DeviceIdentity.Load(_agentDir);
+        if (_deviceIdentity.Language is "he" or "en")
+        {
+            _state.Language = _deviceIdentity.Language;
+            _state.Save(_stateFile);
+            _i18n = I18n.Load(_i18nDir, _state.Language);
+        }
+
+        ApplyLanguage();
+        RefreshSnapshot();
+    }
+
+    private async Task RefreshDeviceIdentityAsync()
+    {
+        var script = Path.Combine(_agentDir, "src", "device-profile.js");
+        if (!File.Exists(script)) return;
+
+        try
+        {
+            var refreshed = await Task.Run(() => RunIdentityRefreshScript(NodeExecutable(), script, _agentDir));
+            if (!refreshed) return;
+            _deviceIdentity = DeviceIdentity.Load(_agentDir);
+            _headerSubtitle.Text = HeaderSubtitle();
+        }
+        catch (Exception ex)
+        {
+            // This is presentation-only. A sleeping or older server must not
+            // prevent the Worker from opening with its cached local identity.
+            AppendWorkerLog("device profile refresh skipped: " + ex.Message);
+        }
+    }
+
+    private static bool RunIdentityRefreshScript(string nodeExecutable, string script, string agentDir)
+    {
+        try
+        {
+            using var proc = Process.Start(new ProcessStartInfo
+            {
+                FileName = nodeExecutable,
+                Arguments = Quote(script),
+                WorkingDirectory = agentDir,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (proc is null) return false;
+            if (!proc.WaitForExit(15_000))
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+            return proc.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -849,7 +936,7 @@ internal sealed class WorkerForm : Form
         Text = T("app.title");
         _tray.Text = T("app.trayText");
         _headerTitle.Text = T("app.title");
-        _headerSubtitle.Text = T(_profile.IsDefaultHost ? "header.defaultSubtitle" : "header.generalSubtitle");
+        _headerSubtitle.Text = HeaderSubtitle();
         _headerPill.Text = T(_profile.IsDefaultHost ? "header.defaultPill" : "header.generalPill");
         _languageButton.Text = T("meta.toggle");
         LayoutHeader(he);
@@ -867,7 +954,7 @@ internal sealed class WorkerForm : Form
         }
         _checksNumber.TextAlign = left;
         _transactionsNumber.TextAlign = left;
-        _footer.TextAlign = ContentAlignment.MiddleLeft;
+        _footer.TextAlign = he ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleRight;
         _footer.RightToLeft = RightToLeft.No;
         LayoutStatusHeader(he, right);
         _startupCheck.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
@@ -877,6 +964,7 @@ internal sealed class WorkerForm : Form
         }
         LayoutInfoLines(he);
         LayoutModelPills(he);
+        LayoutEditionDirection(he);
 
         _checksLabel.Text = T("stats.serverChecks");
         _transactionsLabel.Text = T("stats.transactionsSynced");
@@ -890,16 +978,19 @@ internal sealed class WorkerForm : Form
         _banksPill.Text = T("model.banksCards");
         _freqPill.Text = T("model.frequency");
 
-        _statusText.Text = T(_statusKey);
-        _mainButton.Text = _running ? T("buttons.stop") : T("buttons.start");
-        _runButton.Text = T("buttons.runOnce");
+        _statusText.Text = T(DisplayStatusKey(_statusKey));
+        _mainButton.Text = T(_profile.IsDefaultHost
+            ? (_running ? "buttons.stop" : "buttons.start")
+            : (_running ? "buttons.personalStop" : "buttons.personalStart"));
+        _runButton.Text = T(_profile.IsDefaultHost ? "buttons.runOnce" : "buttons.personalRunOnce");
         _cleanButton.Text = T("buttons.clean");
         _logButton.Text = T("buttons.openLog");
         _folderButton.Text = T("buttons.openFolder");
         UpdateDebugButton();
         _startupCheck.Text = T("startup.label");
-        _intervalLabel.Text = string.Format(T("startup.interval"), IntervalMinutes, MaxRunMinutes);
-        _footer.Text = string.Format(T("footer"), _buildVersion);
+        _intervalLabel.Text = string.Format(T(_profile.IsDefaultHost ? "startup.interval" : "startup.personalInterval"), IntervalMinutes, MaxRunMinutes);
+        _footer.Text = string.Format(T(_profile.IsDefaultHost ? "footer.default" : "footer.personal"), _buildVersion);
+        ApplyMainButtonStyle();
         UpdateStatusHint();
         UpdateActionTooltips();
 
@@ -914,6 +1005,36 @@ internal sealed class WorkerForm : Form
         UpdateBusyState();
         ApplyPairingLanguage(he);
         UpdatePairingVisibility();
+    }
+
+    private string HeaderSubtitle()
+    {
+        if (_profile.IsDefaultHost) return T("header.defaultSubtitle");
+        if (!IsPaired) return T("header.generalSubtitle");
+        return string.IsNullOrWhiteSpace(_deviceIdentity.OwnerName)
+            ? T("header.generalConnected")
+            : string.Format(T("header.generalSubtitleNamed"), _deviceIdentity.OwnerName);
+    }
+
+    private void LayoutEditionDirection(bool he)
+    {
+        _checksCard.Bounds = new Rectangle(he ? 330 : 24, 278, 286, 86);
+        _transactionsCard.Bounds = new Rectangle(he ? 24 : 330, 278, 286, 86);
+
+        if (_profile.IsDefaultHost)
+        {
+            _runButton.Bounds = new Rectangle(he ? 330 : 24, 448, 286, 40);
+            _cleanButton.Bounds = new Rectangle(he ? 24 : 330, 448, 286, 40);
+            _logButton.Bounds = new Rectangle(he ? 330 : 24, 502, 286, 36);
+            _folderButton.Bounds = new Rectangle(he ? 24 : 330, 502, 286, 36);
+            _startupCheck.Bounds = new Rectangle(he ? 330 : 25, 620, 286, 24);
+            _footer.Bounds = new Rectangle(he ? 24 : 330, 620, 286, 24);
+            return;
+        }
+
+        _runButton.Bounds = new Rectangle(24, 448, 592, 44);
+        _startupCheck.Bounds = new Rectangle(he ? 330 : 25, 516, 286, 24);
+        _footer.Bounds = new Rectangle(he ? 24 : 330, 516, 286, 24);
     }
 
     private void LayoutHeader(bool he)
@@ -1053,7 +1174,8 @@ internal sealed class WorkerForm : Form
         if (_busy) RefreshRunProgress();
         else ParseLastResult();
         _startupCheck.Checked = TestStartup();
-        _footer.Text = string.Format(T("footer"), _buildVersion);
+        _headerSubtitle.Text = HeaderSubtitle();
+        _footer.Text = string.Format(T(_profile.IsDefaultHost ? "footer.default" : "footer.personal"), _buildVersion);
     }
 
     private void RefreshConfigPills()
@@ -1107,6 +1229,25 @@ internal sealed class WorkerForm : Form
         UpdateActionTooltips();
     }
 
+    private void ApplyMainButtonStyle()
+    {
+        if (_running)
+        {
+            _mainButton.BackColor = Color.FromArgb(226, 229, 238);
+            _mainButton.ForeColor = _text;
+            if (_mainButton is RoundedButton runningButton)
+                runningButton.HoverBackColor = Color.FromArgb(216, 220, 231);
+            SetButtonBorder(_mainButton, Color.FromArgb(177, 185, 201), 1);
+            return;
+        }
+
+        _mainButton.BackColor = _indigo;
+        _mainButton.ForeColor = Color.White;
+        if (_mainButton is RoundedButton stoppedButton)
+            stoppedButton.HoverBackColor = ControlPaint.Light(_indigo, 0.08f);
+        SetButtonBorder(_mainButton, Color.FromArgb(67, 56, 202), 1);
+    }
+
     private ConfigSummary GetConfigSummary()
     {
         var apiUrl = "";
@@ -1151,10 +1292,23 @@ internal sealed class WorkerForm : Form
     private void SetStatus(string key, Color color)
     {
         _statusKey = key;
-        _statusText.Text = T(key);
+        _statusText.Text = T(DisplayStatusKey(key));
         _dot.ForeColor = color;
         UpdateStatusHint();
         UpdateActionTooltips();
+    }
+
+    private string DisplayStatusKey(string key)
+    {
+        if (_profile.IsDefaultHost) return key;
+        return key switch
+        {
+            "status.stopped" => "status.personalStopped",
+            "status.running" => "status.personalRunning",
+            "status.checking" => "status.personalChecking",
+            "status.syncing" => "status.personalSyncing",
+            _ => key,
+        };
     }
 
     private void SetRestingStatus()
@@ -1171,23 +1325,27 @@ internal sealed class WorkerForm : Form
             {
                 var elapsed = DateTime.Now - _runStartedAt.Value;
                 var elapsedText = $"{(int)elapsed.TotalMinutes:00}:{elapsed.Seconds:00}";
-                _statusHint.Text = string.Format(T("status.hintBusyElapsed"), elapsedText);
+                _statusHint.Text = string.Format(T(_profile.IsDefaultHost ? "status.hintBusyElapsed" : "status.personalHintBusyElapsed"), elapsedText);
             }
             else
             {
-                _statusHint.Text = T("status.hintBusy");
+                _statusHint.Text = T(_profile.IsDefaultHost ? "status.hintBusy" : "status.personalHintBusy");
             }
             return;
         }
 
-        _statusHint.Text = _running ? T("status.hintRunning") : T("status.hintStopped");
+        _statusHint.Text = T(_profile.IsDefaultHost
+            ? (_running ? "status.hintRunning" : "status.hintStopped")
+            : (_running ? "status.personalHintRunning" : "status.personalHintStopped"));
     }
 
     private void UpdateActionTooltips()
     {
         if (_mainButton is null) return;
-        _tips.SetToolTip(_mainButton, T(_running ? "tips.stopService" : "tips.startService"));
-        _tips.SetToolTip(_runButton, T("tips.checkNow"));
+        _tips.SetToolTip(_mainButton, T(_profile.IsDefaultHost
+            ? (_running ? "tips.stopService" : "tips.startService")
+            : (_running ? "tips.personalStopService" : "tips.personalStartService")));
+        _tips.SetToolTip(_runButton, T(_profile.IsDefaultHost ? "tips.checkNow" : "tips.personalCheckNow"));
         _tips.SetToolTip(_cleanButton, T("tips.clean"));
         _tips.SetToolTip(_logButton, T("tips.openLog"));
         _tips.SetToolTip(_folderButton, T("tips.openFolder"));
@@ -1708,18 +1866,8 @@ internal sealed class WorkerForm : Form
     private void StartWorker()
     {
         _running = true;
-        _mainButton.Text = T("buttons.stop");
-        if (_profile.IsDefaultHost)
-        {
-            _mainButton.BackColor = Color.FromArgb(226, 229, 238);
-            _mainButton.ForeColor = _text;
-            if (_mainButton is RoundedButton rounded) rounded.HoverBackColor = Color.FromArgb(216, 220, 231);
-            SetButtonBorder(_mainButton, Color.FromArgb(177, 185, 201), 1);
-        }
-        else
-        {
-            _mainButton.BackColor = _card2;
-        }
+        _mainButton.Text = T(_profile.IsDefaultHost ? "buttons.stop" : "buttons.personalStop");
+        ApplyMainButtonStyle();
         SetStatus("status.running", _green);
         ScheduleNextAlignedCheck();
         _loopTimer.Start();
@@ -1732,14 +1880,8 @@ internal sealed class WorkerForm : Form
         _loopTimer.Stop();
         _nextRunAt = null;
         UpdateNextRun();
-        _mainButton.Text = T("buttons.start");
-        _mainButton.BackColor = _indigo;
-        _mainButton.ForeColor = Color.White;
-        if (_profile.IsDefaultHost)
-        {
-            if (_mainButton is RoundedButton rounded) rounded.HoverBackColor = ControlPaint.Light(_indigo, 0.08f);
-            SetButtonBorder(_mainButton, Color.FromArgb(67, 56, 202), 1);
-        }
+        _mainButton.Text = T(_profile.IsDefaultHost ? "buttons.start" : "buttons.personalStart");
+        ApplyMainButtonStyle();
         if (_busy)
         {
             _lastResult.Text = T("result.stoppedAfterCurrent");
@@ -1987,24 +2129,50 @@ internal sealed class WorkerProfile
     private static JsonSerializerOptions JsonOptions() => new() { PropertyNameCaseInsensitive = true };
 }
 
+internal sealed class DeviceIdentity
+{
+    public string OwnerName { get; set; } = "";
+    public string Language { get; set; } = "";
+
+    public static DeviceIdentity Load(string agentDir)
+    {
+        var path = Path.Combine(agentDir, ".agent-device.json");
+        try
+        {
+            if (!File.Exists(path)) return new DeviceIdentity();
+            var identity = JsonSerializer.Deserialize<DeviceIdentity>(File.ReadAllText(path), JsonOptions());
+            if (identity is null) return new DeviceIdentity();
+            identity.OwnerName = identity.OwnerName?.Trim() ?? "";
+            identity.Language = identity.Language is "he" or "en" ? identity.Language : "";
+            return identity;
+        }
+        catch
+        {
+            return new DeviceIdentity();
+        }
+    }
+
+    private static JsonSerializerOptions JsonOptions() => new() { PropertyNameCaseInsensitive = true };
+}
+
 internal sealed class WorkerState
 {
     public int TotalRuns { get; set; }
-    public string Language { get; set; } = "en";
+    public string Language { get; set; } = "";
 
-    public static WorkerState Load(string path)
+    public static WorkerState Load(string path, string defaultLanguage)
     {
         try
         {
-            if (!File.Exists(path)) return new WorkerState();
+            if (!File.Exists(path)) return new WorkerState { Language = defaultLanguage };
             var state = JsonSerializer.Deserialize<WorkerState>(File.ReadAllText(path), JsonOptions());
-            if (state is null) return new WorkerState();
-            if (state.Language is not "en" and not "he") state.Language = "en";
+            if (state is null) return new WorkerState { Language = defaultLanguage };
+            if (state.Language is not "en" and not "he") state.Language = defaultLanguage;
             return state;
         }
         catch
         {
-            return new WorkerState();
+            return new WorkerState { Language = defaultLanguage };
         }
     }
 
