@@ -11,11 +11,18 @@
     "subtitle": "Local sync agent",
     "pill": "Local and secure",
     "generalSubtitle": "Secure connection to your SpendWise account",
-    "generalConnected": "Connected to your SpendWise account · this computer",
+    "generalConnected": "Your private sync · this computer",
     "generalSubtitleNamed": "Hi {0} · connected to your SpendWise account",
     "defaultSubtitle": "Hananel's Default Worker · admin host",
     "generalPill": "Local and secure",
     "defaultPill": "Default host"
+  },
+  "account": {
+    "hello": "Hi {0}",
+    "connected": "Connected to your SpendWise account",
+    "device": "This computer · {0}",
+    "thisComputer": "this computer",
+    "fallbackName": "SpendWise user"
   },
   "host": {
     "generalTitle": "Local control center",

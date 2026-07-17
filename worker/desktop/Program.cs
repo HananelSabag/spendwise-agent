@@ -159,6 +159,7 @@ internal sealed class WorkerForm : Form
     private readonly Color _cyan = Color.FromArgb(6, 182, 212);
 
     private Panel _header = null!;
+    private CardPanel _accountCard = null!;
     private CardPanel _hostCard = null!;
     private CardPanel _statusCard = null!;
     private CardPanel _checksCard = null!;
@@ -167,6 +168,10 @@ internal sealed class WorkerForm : Form
     private Label _headerTitle = null!;
     private Label _headerSubtitle = null!;
     private Label _headerPill = null!;
+    private Label _accountDot = null!;
+    private Label _accountTitle = null!;
+    private Label _accountBody = null!;
+    private Label _accountDevice = null!;
     private PictureBox _logo = null!;
     private Button _languageButton = null!;
     private Label _hostTitle = null!;
@@ -374,6 +379,15 @@ internal sealed class WorkerForm : Form
         _headerPill = Pill(T("header.pill"), new Rectangle(454, 56, 158, 26), Color.White, Color.FromArgb(34, 197, 94));
         _header.Controls.Add(_headerPill);
 
+        _accountCard = new CardPanel(_card, _border) { Bounds = new Rectangle(24, 108, 592, 64), Radius = 14, Visible = false };
+        Controls.Add(_accountCard);
+        _accountDot = NewLabel("●", new Font("Segoe UI", 12, FontStyle.Regular), _green, new Rectangle(18, 12, 22, 22), ContentAlignment.MiddleCenter);
+        _accountDot.AutoEllipsis = false;
+        _accountTitle = NewLabel("", _bold, _text, new Rectangle(48, 10, 324, 22), ContentAlignment.MiddleLeft);
+        _accountBody = NewLabel("", _small, _muted, new Rectangle(48, 34, 324, 18), ContentAlignment.MiddleLeft);
+        _accountDevice = Pill("", new Rectangle(392, 19, 176, 26), Color.FromArgb(67, 56, 202), Color.FromArgb(238, 242, 255));
+        _accountCard.Controls.AddRange(new Control[] { _accountDot, _accountTitle, _accountBody, _accountDevice });
+
         _hostCard = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 112, 592, 112) };
         Controls.Add(_hostCard);
         _hostTitle = NewLabel("", _bold, _text, new Rectangle(24, 18, 360, 24), ContentAlignment.MiddleLeft);
@@ -485,16 +499,21 @@ internal sealed class WorkerForm : Form
         // The public edition is a customer app, not an operator console.
         // Keep the same visual language as the Default Host while exposing
         // only the controls a person syncing their own account actually needs.
-        ClientSize = new Size(640, 590);
-        _pairingOverlay.Bounds = new Rectangle(0, 88, 640, 502);
-        _runButton.Bounds = new Rectangle(24, 448, 592, 44);
+        ClientSize = new Size(640, 670);
+        _pairingOverlay.Bounds = new Rectangle(0, 88, 640, 582);
+        _accountCard.Visible = true;
+        _statusCard.Bounds = new Rectangle(24, 188, 592, 154);
+        _checksCard.Bounds = new Rectangle(24, 358, 286, 86);
+        _transactionsCard.Bounds = new Rectangle(330, 358, 286, 86);
+        _mainButton.Bounds = new Rectangle(24, 462, 592, 50);
+        _runButton.Bounds = new Rectangle(24, 528, 592, 44);
         _cleanButton.Visible = false;
         _logButton.Visible = false;
         _folderButton.Visible = false;
         _debugButton.Visible = false;
-        _startupCheck.Bounds = new Rectangle(25, 516, 286, 24);
-        _footer.Bounds = new Rectangle(330, 516, 286, 24);
-        _intervalLabel.Bounds = new Rectangle(24, 550, 592, 24);
+        _startupCheck.Bounds = new Rectangle(25, 596, 286, 24);
+        _footer.Bounds = new Rectangle(330, 596, 286, 24);
+        _intervalLabel.Bounds = new Rectangle(24, 630, 592, 24);
         _miClean.Visible = false;
     }
 
@@ -691,6 +710,7 @@ internal sealed class WorkerForm : Form
             if (!refreshed) return;
             _deviceIdentity = DeviceIdentity.Load(_agentDir);
             _headerSubtitle.Text = HeaderSubtitle();
+            ApplyAccountCopy(_i18n.Language == "he");
         }
         catch (Exception ex)
         {
@@ -965,6 +985,7 @@ internal sealed class WorkerForm : Form
         LayoutInfoLines(he);
         LayoutModelPills(he);
         LayoutEditionDirection(he);
+        ApplyAccountCopy(he);
 
         _checksLabel.Text = T("stats.serverChecks");
         _transactionsLabel.Text = T("stats.transactionsSynced");
@@ -1011,15 +1032,46 @@ internal sealed class WorkerForm : Form
     {
         if (_profile.IsDefaultHost) return T("header.defaultSubtitle");
         if (!IsPaired) return T("header.generalSubtitle");
-        return string.IsNullOrWhiteSpace(_deviceIdentity.OwnerName)
-            ? T("header.generalConnected")
-            : string.Format(T("header.generalSubtitleNamed"), _deviceIdentity.OwnerName);
+        return T("header.generalConnected");
+    }
+
+    private void ApplyAccountCopy(bool he)
+    {
+        if (_profile.IsDefaultHost) return;
+        var owner = string.IsNullOrWhiteSpace(_deviceIdentity.OwnerName) ? T("account.fallbackName") : _deviceIdentity.OwnerName;
+        var device = string.IsNullOrWhiteSpace(_deviceIdentity.Label) ? T("account.thisComputer") : _deviceIdentity.Label;
+        _accountTitle.Text = string.Format(T("account.hello"), owner);
+        _accountBody.Text = T("account.connected");
+        _accountDevice.Text = string.Format(T("account.device"), device);
+
+        if (he)
+        {
+            _accountDot.Bounds = new Rectangle(548, 12, 22, 22);
+            _accountTitle.Bounds = new Rectangle(212, 10, 324, 22);
+            _accountBody.Bounds = new Rectangle(212, 34, 324, 18);
+            _accountDevice.Bounds = new Rectangle(20, 19, 176, 26);
+            _accountTitle.TextAlign = ContentAlignment.MiddleRight;
+            _accountBody.TextAlign = ContentAlignment.MiddleRight;
+            _accountTitle.RightToLeft = RightToLeft.Yes;
+            _accountBody.RightToLeft = RightToLeft.Yes;
+            return;
+        }
+
+        _accountDot.Bounds = new Rectangle(18, 12, 22, 22);
+        _accountTitle.Bounds = new Rectangle(48, 10, 324, 22);
+        _accountBody.Bounds = new Rectangle(48, 34, 324, 18);
+        _accountDevice.Bounds = new Rectangle(392, 19, 176, 26);
+        _accountTitle.TextAlign = ContentAlignment.MiddleLeft;
+        _accountBody.TextAlign = ContentAlignment.MiddleLeft;
+        _accountTitle.RightToLeft = RightToLeft.No;
+        _accountBody.RightToLeft = RightToLeft.No;
     }
 
     private void LayoutEditionDirection(bool he)
     {
-        _checksCard.Bounds = new Rectangle(he ? 330 : 24, 278, 286, 86);
-        _transactionsCard.Bounds = new Rectangle(he ? 24 : 330, 278, 286, 86);
+        var statsY = _profile.IsDefaultHost ? 278 : 358;
+        _checksCard.Bounds = new Rectangle(he ? 330 : 24, statsY, 286, 86);
+        _transactionsCard.Bounds = new Rectangle(he ? 24 : 330, statsY, 286, 86);
 
         if (_profile.IsDefaultHost)
         {
@@ -1032,9 +1084,9 @@ internal sealed class WorkerForm : Form
             return;
         }
 
-        _runButton.Bounds = new Rectangle(24, 448, 592, 44);
-        _startupCheck.Bounds = new Rectangle(he ? 330 : 25, 516, 286, 24);
-        _footer.Bounds = new Rectangle(he ? 24 : 330, 516, 286, 24);
+        _runButton.Bounds = new Rectangle(24, 528, 592, 44);
+        _startupCheck.Bounds = new Rectangle(he ? 330 : 25, 596, 286, 24);
+        _footer.Bounds = new Rectangle(he ? 24 : 330, 596, 286, 24);
     }
 
     private void LayoutHeader(bool he)
@@ -2131,6 +2183,7 @@ internal sealed class WorkerProfile
 
 internal sealed class DeviceIdentity
 {
+    public string Label { get; set; } = "";
     public string OwnerName { get; set; } = "";
     public string Language { get; set; } = "";
 
@@ -2142,6 +2195,7 @@ internal sealed class DeviceIdentity
             if (!File.Exists(path)) return new DeviceIdentity();
             var identity = JsonSerializer.Deserialize<DeviceIdentity>(File.ReadAllText(path), JsonOptions());
             if (identity is null) return new DeviceIdentity();
+            identity.Label = identity.Label?.Trim() ?? "";
             identity.OwnerName = identity.OwnerName?.Trim() ?? "";
             identity.Language = identity.Language is "he" or "en" ? identity.Language : "";
             return identity;
@@ -2353,7 +2407,10 @@ internal sealed class CardPanel : Panel
     {
         _back = back;
         _border = border;
-        BackColor = Color.Transparent;
+        // Child controls use Parent.BackColor when clearing their rounded
+        // corners. Exposing the real card surface prevents transparent pixels
+        // from compositing as black outlines around pills and buttons.
+        BackColor = back;
         DoubleBuffered = true;
     }
 

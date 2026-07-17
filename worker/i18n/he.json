@@ -11,11 +11,18 @@
     "subtitle": "סוכן סנכרון מקומי",
     "pill": "מקומי ומאובטח",
     "generalSubtitle": "חיבור מאובטח לחשבון SpendWise שלך",
-    "generalConnected": "מחובר לחשבון SpendWise שלך · המחשב הזה",
+    "generalConnected": "הסנכרון הפרטי שלך · המחשב הזה",
     "generalSubtitleNamed": "שלום {0} · מחובר לחשבון SpendWise שלך",
     "defaultSubtitle": "ה־Default Worker של חננאל · עמדת מנהל",
     "generalPill": "מקומי ומאובטח",
     "defaultPill": "Default Host"
+  },
+  "account": {
+    "hello": "שלום {0}",
+    "connected": "מחובר לחשבון SpendWise שלך",
+    "device": "המחשב הזה · {0}",
+    "thisComputer": "המחשב הזה",
+    "fallbackName": "משתמש SpendWise"
   },
   "host": {
     "generalTitle": "מרכז הבקרה המקומי",
