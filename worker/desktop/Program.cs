@@ -174,6 +174,7 @@ internal sealed class WorkerForm : Form
     private Label _accountDevice = null!;
     private PictureBox _logo = null!;
     private Button _languageButton = null!;
+    private Button _helpButton = null!;
     private Label _hostTitle = null!;
     private Label _hostBody = null!;
     private Label _hostNote = null!;
@@ -218,6 +219,19 @@ internal sealed class WorkerForm : Form
     private Label _pairingStatus = null!;
     private Label _pairingHelp = null!;
     private bool _pairingBusy;
+    private Panel _helpOverlay = null!;
+    private Label _helpTitle = null!;
+    private Label _helpIntro = null!;
+    private Label _helpAutomaticTitle = null!;
+    private Label _helpAutomaticBody = null!;
+    private Label _helpNowTitle = null!;
+    private Label _helpNowBody = null!;
+    private Label _helpSecurityTitle = null!;
+    private Label _helpSecurityBody = null!;
+    private Label _helpTransparencyTitle = null!;
+    private Label _helpTransparencyBody = null!;
+    private LinkLabel _helpSource = null!;
+    private Button _helpClose = null!;
     private Label _intervalLabel = null!;
     private Label _footer = null!;
     private NotifyIcon _tray = null!;
@@ -376,6 +390,12 @@ internal sealed class WorkerForm : Form
         _languageButton.FlatAppearance.BorderColor = _border;
         _header.Controls.Add(_languageButton);
 
+        _helpButton = NewButton("?", new Rectangle(488, 25, 34, 32), _card, _indigo, _bold);
+        if (_helpButton is RoundedButton helpRounded) helpRounded.Radius = 12;
+        SetButtonBorder(_helpButton, _border, 1);
+        _helpButton.Visible = !_profile.IsDefaultHost;
+        _header.Controls.Add(_helpButton);
+
         _headerPill = Pill(T("header.pill"), new Rectangle(454, 56, 158, 26), Color.White, Color.FromArgb(34, 197, 94));
         _header.Controls.Add(_headerPill);
 
@@ -473,6 +493,7 @@ internal sealed class WorkerForm : Form
         };
 
         _languageButton.Click += (_, _) => ToggleLanguage();
+        _helpButton.Click += (_, _) => ShowHelp();
         _mainButton.Click += (_, _) => { if (_running) StopWorker(); else StartWorker(); };
         _runButton.Click += (_, _) => InvokeAgentRun();
         _cleanButton.Click += (_, _) => CleanStuckProcesses();
@@ -488,6 +509,7 @@ internal sealed class WorkerForm : Form
         FormClosing += OnFormClosing;
 
         BuildPairingOverlay();
+        BuildHelpOverlay();
         ApplyEditionLayout();
     }
 
@@ -610,6 +632,100 @@ internal sealed class WorkerForm : Form
         {
             if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; _ = RunPairingAsync(); }
         };
+    }
+
+    private void BuildHelpOverlay()
+    {
+        _helpOverlay = new Panel
+        {
+            Bounds = new Rectangle(0, 88, 640, 582),
+            BackColor = _bg,
+            Visible = false,
+        };
+        Controls.Add(_helpOverlay);
+
+        var card = new CardPanel(_panel, _border) { Bounds = new Rectangle(24, 22, 592, 524), Radius = 18 };
+        _helpOverlay.Controls.Add(card);
+        _helpTitle = NewLabel("", _title, _text, new Rectangle(24, 20, 544, 30), ContentAlignment.MiddleLeft);
+        _helpIntro = NewLabel("", _regular, _muted, new Rectangle(24, 54, 544, 42), ContentAlignment.TopLeft);
+        _helpAutomaticTitle = NewLabel("", _bold, _text, new Rectangle(24, 106, 544, 22), ContentAlignment.MiddleLeft);
+        _helpAutomaticBody = NewLabel("", _small, _muted, new Rectangle(24, 130, 544, 42), ContentAlignment.TopLeft);
+        _helpNowTitle = NewLabel("", _bold, _text, new Rectangle(24, 180, 544, 22), ContentAlignment.MiddleLeft);
+        _helpNowBody = NewLabel("", _small, _muted, new Rectangle(24, 204, 544, 42), ContentAlignment.TopLeft);
+        _helpSecurityTitle = NewLabel("", _bold, _text, new Rectangle(24, 254, 544, 22), ContentAlignment.MiddleLeft);
+        _helpSecurityBody = NewLabel("", _small, _muted, new Rectangle(24, 278, 544, 58), ContentAlignment.TopLeft);
+        _helpTransparencyTitle = NewLabel("", _bold, _text, new Rectangle(24, 344, 544, 22), ContentAlignment.MiddleLeft);
+        _helpTransparencyBody = NewLabel("", _small, _muted, new Rectangle(24, 368, 544, 50), ContentAlignment.TopLeft);
+        card.Controls.AddRange(new Control[] {
+            _helpTitle, _helpIntro, _helpAutomaticTitle, _helpAutomaticBody,
+            _helpNowTitle, _helpNowBody, _helpSecurityTitle, _helpSecurityBody,
+            _helpTransparencyTitle, _helpTransparencyBody
+        });
+
+        _helpSource = new LinkLabel
+        {
+            Bounds = new Rectangle(24, 424, 544, 22),
+            Font = _small,
+            BackColor = _panel,
+            LinkColor = _indigo,
+            ActiveLinkColor = _indigoDeep,
+            VisitedLinkColor = _indigo,
+            TextAlign = ContentAlignment.MiddleLeft,
+        };
+        _helpSource.LinkClicked += (_, _) =>
+        {
+            try { Process.Start(new ProcessStartInfo { FileName = "https://github.com/HananelSabag/spendwise-agent", UseShellExecute = true }); }
+            catch { }
+        };
+        card.Controls.Add(_helpSource);
+
+        _helpClose = NewButton("", new Rectangle(24, 460, 544, 42), _card2, _text, _bold);
+        if (_helpClose is RoundedButton closeRounded) closeRounded.Radius = 12;
+        SetButtonBorder(_helpClose, Color.FromArgb(196, 203, 216), 1);
+        _helpClose.Click += (_, _) => HideHelp();
+        card.Controls.Add(_helpClose);
+    }
+
+    private void ShowHelp()
+    {
+        _helpOverlay.Visible = true;
+        _helpOverlay.BringToFront();
+    }
+
+    private void HideHelp()
+    {
+        _helpOverlay.Visible = false;
+        UpdatePairingVisibility();
+    }
+
+    private void ApplyHelpLanguage(bool he)
+    {
+        _helpTitle.Text = T("help.title");
+        _helpIntro.Text = T("help.intro");
+        _helpAutomaticTitle.Text = T("help.automaticTitle");
+        _helpAutomaticBody.Text = T("help.automaticBody");
+        _helpNowTitle.Text = T("help.nowTitle");
+        _helpNowBody.Text = T("help.nowBody");
+        _helpSecurityTitle.Text = T("help.securityTitle");
+        _helpSecurityBody.Text = T("help.securityBody");
+        _helpTransparencyTitle.Text = T("help.transparencyTitle");
+        _helpTransparencyBody.Text = T("help.transparencyBody");
+        _helpSource.Text = T("help.source");
+        _helpClose.Text = T("help.close");
+
+        foreach (var label in new[] {
+            _helpTitle, _helpIntro, _helpAutomaticTitle, _helpAutomaticBody,
+            _helpNowTitle, _helpNowBody, _helpSecurityTitle, _helpSecurityBody,
+            _helpTransparencyTitle, _helpTransparencyBody
+        })
+        {
+            label.TextAlign = he ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
+            label.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        }
+        _helpTitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+        _helpSource.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+        _helpSource.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _helpClose.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
     }
 
     private void ApplyPairingLanguage(bool he)
@@ -950,7 +1066,7 @@ internal sealed class WorkerForm : Form
     {
         var he = _i18n.Language == "he";
         var left = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
-        var right = he ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleRight;
+        var nextRunAlign = ContentAlignment.MiddleRight;
 
         RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
         Text = T("app.title");
@@ -974,17 +1090,20 @@ internal sealed class WorkerForm : Form
         }
         _checksNumber.TextAlign = left;
         _transactionsNumber.TextAlign = left;
-        _footer.TextAlign = he ? ContentAlignment.MiddleLeft : ContentAlignment.MiddleRight;
-        _footer.RightToLeft = RightToLeft.No;
-        LayoutStatusHeader(he, right);
+        _checksNumber.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _transactionsNumber.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        _footer.TextAlign = ContentAlignment.MiddleRight;
+        _footer.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
+        LayoutStatusHeader(he, nextRunAlign);
         _startupCheck.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
-        foreach (var control in new Control[] { _languageButton, _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _debugButton, _headerPill, _hostBadge, _keyPill, _apiPill, _banksPill, _freqPill })
+        foreach (var control in new Control[] { _languageButton, _helpButton, _mainButton, _runButton, _cleanButton, _logButton, _folderButton, _debugButton, _headerPill, _hostBadge, _keyPill, _apiPill, _banksPill, _freqPill })
         {
             control.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;
         }
         LayoutInfoLines(he);
         LayoutModelPills(he);
         LayoutEditionDirection(he);
+        ApplyContainerDirection(he);
         ApplyAccountCopy(he);
 
         _checksLabel.Text = T("stats.serverChecks");
@@ -1024,8 +1143,53 @@ internal sealed class WorkerForm : Form
         ParseLastResult();
         RefreshConfigPills();
         UpdateBusyState();
+        ApplyHelpLanguage(he);
         ApplyPairingLanguage(he);
         UpdatePairingVisibility();
+    }
+
+    private void ApplyContainerDirection(bool he)
+    {
+        var direction = he ? RightToLeft.Yes : RightToLeft.No;
+        foreach (var container in new Control[] {
+            _header, _accountCard, _hostCard, _statusCard, _checksCard,
+            _transactionsCard, _modelCard, _pairingOverlay, _helpOverlay
+        })
+        {
+            container.RightToLeft = direction;
+        }
+
+        // Hebrew is not only a mirrored page: every readable value inside the
+        // cards must start at the right edge of its own surface as well.
+        var cardLabels = new[] {
+            _accountTitle, _accountBody, _hostTitle, _hostBody, _hostNote,
+            _statusText, _nextRun, _lastResult, _lastRun, _statusHint,
+            _checksNumber, _checksLabel, _transactionsNumber, _transactionsLabel,
+            _modelTitle, _runTitle, _runBody, _handoffTitle, _handoffBody,
+            _reportTitle, _reportBody, _intervalLabel, _footer
+        };
+        foreach (var label in cardLabels)
+        {
+            label.RightToLeft = direction;
+            if (he)
+            {
+                label.TextAlign = label == _hostBody || label == _intervalLabel
+                    ? ContentAlignment.TopRight
+                    : ContentAlignment.MiddleRight;
+            }
+        }
+
+        if (he)
+        {
+            // WinForms mirrors TextAlign a second time for labels nested in an
+            // RTL card. Keep these four labels in visual coordinates so their
+            // headings and numbers actually land on the right edge.
+            foreach (var label in new[] { _checksNumber, _checksLabel, _transactionsNumber, _transactionsLabel })
+            {
+                label.RightToLeft = RightToLeft.No;
+                label.TextAlign = ContentAlignment.MiddleRight;
+            }
+        }
     }
 
     private string HeaderSubtitle()
@@ -1096,6 +1260,7 @@ internal sealed class WorkerForm : Form
         _headerTitle.Bounds = he ? new Rectangle(194, 16, 354, 28) : new Rectangle(86, 16, 360, 28);
         _headerSubtitle.Bounds = he ? new Rectangle(194, 45, 354, 20) : new Rectangle(88, 45, 360, 20);
         _languageButton.Bounds = he ? new Rectangle(28, 25, 82, 32) : new Rectangle(530, 25, 82, 32);
+        _helpButton.Bounds = he ? new Rectangle(122, 25, 34, 32) : new Rectangle(484, 25, 34, 32);
         _headerTitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
         _headerSubtitle.TextAlign = he ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
         _headerTitle.RightToLeft = he ? RightToLeft.Yes : RightToLeft.No;

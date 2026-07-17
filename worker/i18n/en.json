@@ -160,6 +160,20 @@
     "errorGeneric": "Couldn't connect — check the code and try again",
     "help": "This is a one-time code. After pairing, only this computer runs your syncs."
   },
+  "help": {
+    "title": "How does syncing work?",
+    "intro": "You can leave SpendWise Worker running in the background and close this window. It stays available in the Windows notification area.",
+    "automaticTitle": "Automatic sync",
+    "automaticBody": "Every 30 minutes this computer checks whether SpendWise has a sync waiting. Your bank opens only when an allowed request exists — not on every check.",
+    "nowTitle": "Check and sync now",
+    "nowBody": "Checks immediately for a request in your account. If none is waiting, no bank opens and nothing unnecessary runs.",
+    "securityTitle": "Privacy and safety",
+    "securityBody": "The Worker never asks for your bank username or password — only the 8-character pairing code. Bank login stays encrypted and is opened in memory only here; synced data is sent to your SpendWise account over HTTPS.",
+    "transparencyTitle": "Want to inspect it yourself?",
+    "transparencyBody": "The engine source is included under app/src and published on GitHub. You can review it or scan the files with any security tool you trust.",
+    "source": "Open the source code on GitHub",
+    "close": "Got it — back to the Worker"
+  },
   "footer": {
     "default": "SpendWise · Hananel Sabag · build {0}",
     "personal": "SpendWise · your private sync · build {0}"
