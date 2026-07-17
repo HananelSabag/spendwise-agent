@@ -88,6 +88,9 @@ export function assertKnownBank(source) {
 export function assertCredentialShape(source, credentials) {
   const missing = BANKS[source].credFields.filter((f) => !credentials?.[f]);
   if (missing.length > 0) {
-    throw new Error(`Credentials for ${source} missing fields: ${missing.join(', ')}`);
+    const error = new Error(`Credentials for ${source} missing fields: ${missing.join(', ')}`);
+    error.code = 'CREDENTIALS_INVALID_FORMAT';
+    error.terminal = true;
+    throw error;
   }
 }

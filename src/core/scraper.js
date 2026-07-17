@@ -10,7 +10,64 @@ import { logger } from '../utils/log.js';
 import { assertKnownBank } from './banks.js';
 import { rawDebugEnabled, writeRawScrape } from './rawReport.js';
 
-const RETRYABLE = ['TIMEOUT', 'GENERIC', 'GENERAL_ERROR'];
+const RETRYABLE = new Set(['TIMEOUT', 'GENERIC', 'GENERAL_ERROR']);
+const TERMINAL_FAILURES = {
+  INVALID_PASSWORD: 'AUTH_INVALID',
+  CHANGE_PASSWORD: 'PASSWORD_CHANGE_REQUIRED',
+  ACCOUNT_BLOCKED: 'ACCOUNT_BLOCKED',
+  TWO_FACTOR_RETRIEVER_MISSING: 'MFA_REQUIRED',
+};
+
+const CREDENTIAL_ERROR_TEXT = /invalid\s+(?:password|credentials?|user(?:name)?|login)|incorrect\s+(?:password|credentials?|user(?:name)?)|wrong\s+(?:password|credentials?|user(?:name)?)|login\s+failed|פרטי\s+ה(?:הזדהות|תחברות).*שגוי|שם\s+משתמש.*שגוי|סיסמ(?:ה|א).*שגוי/i;
+
+export class ScrapeFailure extends Error {
+  constructor(message, { code = 'SCRAPER_ERROR', terminal = false, scraperErrorType = null } = {}) {
+    super(message);
+    this.name = 'ScrapeFailure';
+    this.code = code;
+    this.terminal = terminal;
+    this.scraperErrorType = scraperErrorType;
+  }
+}
+
+export function classifyScrapeFailure(result = {}) {
+  const errorType = String(result.errorType || '').toUpperCase();
+  const errorMessage = String(result.errorMessage || 'unknown error');
+  const terminalCode = TERMINAL_FAILURES[errorType]
+    || (CREDENTIAL_ERROR_TEXT.test(errorMessage) ? 'AUTH_INVALID' : null);
+
+  return {
+    code: terminalCode || (errorType === 'TIMEOUT' ? 'SCRAPER_TIMEOUT' : 'SCRAPER_ERROR'),
+    terminal: Boolean(terminalCode),
+    retryable: !terminalCode && RETRYABLE.has(errorType),
+    errorType: errorType || 'SCRAPE_ERROR',
+    message: `${errorType || 'ScrapeError'}: ${errorMessage}`,
+  };
+}
+
+export async function runScrapeAttempts(attempt, {
+  retryDelayMs = 30_000,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  onRetry = () => {},
+} = {}) {
+  let result = await attempt();
+  let failure = result.success ? null : classifyScrapeFailure(result);
+  if (failure?.retryable) {
+    onRetry(failure);
+    await sleep(retryDelayMs);
+    result = await attempt();
+    failure = result.success ? null : classifyScrapeFailure(result);
+  }
+
+  if (failure) {
+    throw new ScrapeFailure(failure.message, {
+      code: failure.code,
+      terminal: failure.terminal,
+      scraperErrorType: failure.errorType,
+    });
+  }
+  return result;
+}
 
 // Hard wall-clock cap per scrape attempt. israeli-bank-scrapers takes a
 // `timeout` option but does NOT guarantee scrape() settles within it — a stuck
@@ -70,16 +127,9 @@ export async function scrapeBank(source, credentials, browser, fromDate = scrape
     }
   };
 
-  let result = await attempt();
-  if (!result.success && RETRYABLE.includes(result.errorType)) {
-    log.warn(`transient failure (${result.errorType}) — retrying once in 30s`);
-    await new Promise((r) => setTimeout(r, 30_000));
-    result = await attempt();
-  }
-
-  if (!result.success) {
-    throw new Error(`${result.errorType || 'ScrapeError'}: ${result.errorMessage || 'unknown error'}`);
-  }
+  const result = await runScrapeAttempts(attempt, {
+    onRetry: (failure) => log.warn(`transient failure (${failure.errorType}) — retrying once in 30s`),
+  });
 
   const accounts = result.accounts || [];
   // Debug: when raw export is toggled on (worker button / env / flag file),

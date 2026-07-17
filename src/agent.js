@@ -43,15 +43,19 @@ async function processJob(job, browser, privateKey) {
 
   // Decrypt — plaintext credentials exist only inside this function
   let credentials = openEnvelope(job.encrypted_credentials, privateKey);
-  assertCredentialShape(source, credentials);
+  let rawAccounts;
+  try {
+    assertCredentialShape(source, credentials);
 
-  if (BANKS[source].warmupUrl) await warmup(browser, BANKS[source].warmupUrl, source);
+    if (BANKS[source].warmupUrl) await warmup(browser, BANKS[source].warmupUrl, source);
 
-  jlog.info(`scraping ${source} (user ${job.user_id})`);
-  // Default Host serves more than one user. Scope diagnostic RAW files so a
-  // later scrape of the same provider cannot overwrite another user's audit.
-  const rawAccounts = await scrapeBank(source, credentials, browser, undefined, `user-${job.user_id}`);
-  credentials = null; // drop the plaintext reference the moment it's not needed
+    jlog.info(`scraping ${source} (user ${job.user_id})`);
+    // Default Host serves more than one user. Scope diagnostic RAW files so a
+    // later scrape of the same provider cannot overwrite another user's audit.
+    rawAccounts = await scrapeBank(source, credentials, browser, undefined, `user-${job.user_id}`);
+  } finally {
+    credentials = null; // drop plaintext even when validation/login throws
+  }
 
   saveScrape(source, rawAccounts);
   const accounts = mapAccounts(source, rawAccounts);
@@ -174,7 +178,10 @@ async function runJobBatch(jobs, privateKey, isRestart) {
       } catch (err) {
         log.error(`job ${job.id} FAILED — ${err.message}`);
         await notify(`Job ${job.id} (${job.bank_source}) failed: ${err.message}`);
-        await reportFailure(job.id, err.message)
+        await reportFailure(job.id, err.message, {
+          errorCode: err.code,
+          terminal: err.terminal === true,
+        })
           .catch((e) => log.error(`report failed — ${e.message}`));
       } finally {
         // Close the scraper's leftover pages so tabs don't pile up job-to-job

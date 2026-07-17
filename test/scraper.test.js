@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapAccounts } from '../src/core/scraper.js';
+import {
+  classifyScrapeFailure,
+  mapAccounts,
+  runScrapeAttempts,
+  ScrapeFailure,
+} from '../src/core/scraper.js';
 import { BANKS, assertCredentialShape } from '../src/core/banks.js';
 
 test('mapAccounts maps a valid account', () => {
@@ -197,6 +202,13 @@ test('assertCredentialShape enforces per-bank required fields', () => {
     assertCredentialShape('max', { username: 'u', password: 'p' }));
 });
 
+test('malformed saved credentials require an edit and must not be retried', () => {
+  assert.throws(
+    () => assertCredentialShape('yahav', { username: 'u' }),
+    (error) => error.code === 'CREDENTIALS_INVALID_FORMAT' && error.terminal === true,
+  );
+});
+
 test('BANKS registry exposes supported SpendWise source ids with scraper company ids', () => {
   assert.equal(BANKS.visa_cal.companyId, 'visaCal');
   assert.equal(BANKS.otsar_hahayal.companyId, 'otsarHahayal');
@@ -213,4 +225,44 @@ test('assertCredentialShape covers newly exposed banks and credit companies', ()
     assertCredentialShape('mercantile', { id: '1', password: 'p', num: '7' }));
   assert.throws(() =>
     assertCredentialShape('amex', { id: '1', password: 'p' }), /missing fields: card6Digits/);
+});
+
+test('credential rejection is terminal and never retried', async () => {
+  let attempts = 0;
+  await assert.rejects(
+    runScrapeAttempts(async () => {
+      attempts += 1;
+      return { success: false, errorType: 'INVALID_PASSWORD', errorMessage: 'Login failed' };
+    }, { retryDelayMs: 0, sleep: async () => {} }),
+    (error) => error instanceof ScrapeFailure
+      && error.code === 'AUTH_INVALID'
+      && error.terminal === true,
+  );
+  assert.equal(attempts, 1);
+});
+
+test('account lock and password-change responses require user action', () => {
+  assert.deepEqual(
+    classifyScrapeFailure({ errorType: 'ACCOUNT_BLOCKED', errorMessage: 'blocked' }),
+    {
+      code: 'ACCOUNT_BLOCKED', terminal: true, retryable: false,
+      errorType: 'ACCOUNT_BLOCKED', message: 'ACCOUNT_BLOCKED: blocked',
+    },
+  );
+  assert.equal(
+    classifyScrapeFailure({ errorType: 'CHANGE_PASSWORD', errorMessage: 'change it' }).code,
+    'PASSWORD_CHANGE_REQUIRED',
+  );
+});
+
+test('transient scraper failures retry once and then stop', async () => {
+  let attempts = 0;
+  await assert.rejects(
+    runScrapeAttempts(async () => {
+      attempts += 1;
+      return { success: false, errorType: 'TIMEOUT', errorMessage: 'slow bank' };
+    }, { retryDelayMs: 0, sleep: async () => {} }),
+    (error) => error.code === 'SCRAPER_TIMEOUT' && error.terminal === false,
+  );
+  assert.equal(attempts, 2);
 });

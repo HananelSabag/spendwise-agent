@@ -70,11 +70,17 @@ export function reportSuccess(jobId, accounts) {
  * scrape cooldown) — the server records the job as failed but does NOT count
  * it toward the connection's consecutive_failures / auto-pause threshold.
  */
-export function reportFailure(jobId, error, { transient = false } = {}) {
+export function reportFailure(jobId, error, {
+  transient = false,
+  errorCode = null,
+  terminal = false,
+} = {}) {
   return request('POST', `/bank-agent/jobs/${jobId}/result`, {
     success: false,
     error: String(error).slice(0, 500),
     transient,
+    error_code: errorCode || undefined,
+    terminal: terminal === true,
   });
 }
 
